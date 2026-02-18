@@ -76,6 +76,59 @@ def create_brave_driver(
     return driver
 
 
+def get_products(driver):
+    """
+    Extract product title, price, and link from the current results page.
+    Returns a list of dictionaries.
+    """
+
+    products = []
+
+    # Get all product cards
+    items = driver.find_elements(By.CSS_SELECTOR, "article.prd")
+
+    for item in items:
+        try:
+            title = item.find_element(By.CSS_SELECTOR, "h3").text
+        except:
+            title = None
+
+        try:
+            price = item.find_element(By.CSS_SELECTOR, "div.prc").text
+        except:
+            price = None
+
+        try:
+            link = item.find_element(By.CSS_SELECTOR, "a.core").get_attribute("href")
+        except:
+            link = None
+
+        products.append({"title": title, "price": price, "link": link})
+
+    return products
+
+
+def get_all_products(driver, wait, query, pages=3):
+    all_products = []
+
+    for page in range(1, pages + 1):
+        url = f"https://www.jumia.com.eg/catalog/?q={query}&page={page}"
+        print(f"Scraping page {page}")
+        print("URL:", url)
+
+        driver.get(url)
+
+        # Wait for products to load
+        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "article.prd")))
+
+        products = get_products(driver)
+        print("Products found:", len(products))
+
+        all_products.extend(products)
+
+    return all_products
+
+
 # Usage
 driver = create_brave_driver(
     headless=False,
@@ -95,3 +148,10 @@ wait = WebDriverWait(driver, 10)
 popup_btn = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "cls")))
 
 popup_btn.click()
+
+products = get_all_products(driver, wait, query="iphone", pages=3)
+
+print("Total products:", len(products))
+
+for p in products[:5]:
+    print(p)
