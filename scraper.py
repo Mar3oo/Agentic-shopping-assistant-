@@ -142,6 +142,7 @@ def get_product_extra_info(driver, wait, link):
 
     details_text = None
     seller_score = None
+    category = None
 
     # Product description
     try:
@@ -158,6 +159,14 @@ def get_product_extra_info(driver, wait, link):
     except:
         pass
 
+    # Category / Breadcrumb
+
+    try:
+        breadcrumbs = driver.find_elements(By.CSS_SELECTOR, "a.cbs")
+        category = ",".join([b.text for b in breadcrumbs if b.text])
+    except:
+        pass
+
     # Small delay (important to avoid blocking)
     time.sleep(random.uniform(1, 2))
 
@@ -165,7 +174,11 @@ def get_product_extra_info(driver, wait, link):
     driver.close()
     driver.switch_to.window(driver.window_handles[0])
 
-    return {"details_text": details_text, "seller_score": seller_score}
+    return {
+        "details_text": details_text,
+        "seller_score": seller_score,
+        "category": category,
+    }
 
 
 # Usage
