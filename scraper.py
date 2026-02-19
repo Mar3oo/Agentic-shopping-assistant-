@@ -7,6 +7,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import random
+import json
+import os
+from datetime import datetime
 
 
 def create_brave_driver(
@@ -181,6 +184,102 @@ def get_product_extra_info(driver, wait, link):
     }
 
 
+def normalize_product(product):
+    # Normalize URL (remove tracking params)
+    if product.get("link"):
+        product["link"] = product["link"].split("?")[0]
+
+    # Convert price to float if possible
+    if product.get("price"):
+        price = product["price"].replace("EGP", "").replace(",", "").strip()
+        try:
+            product["price"] = float(price)
+        except:
+            pass
+
+    # Convert seller score (e.g., "58%") to float
+    if product.get("seller_score"):
+        score = product["seller_score"].replace("%", "").strip()
+        try:
+            product["seller_score"] = float(score) / 100
+        except:
+            pass
+
+    return product
+
+
+def create_metadata(source, search_query, page_number):
+    return {
+        "source": source,
+        "scraped_at": datetime.now().isoformat(),
+        "search_query": search_query,
+        "page_number": page_number,
+    }
+
+
+def build_records(products, source, search_query, page_number):
+    metadata = create_metadata(source, search_query, page_number)
+    records = []
+
+    for product in products:
+        product = normalize_product(product)
+
+        record = {
+            "metadata": metadata,
+            "product": product,
+        }
+        records.append(record)
+
+    return records
+
+
+def upsert_records(records, file_path="jumia_data.json"):
+    """
+    Save records into one file.
+    Use product.link as primary key.
+    Update if exists, insert if new.
+    """
+
+    # Load existing data
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            try:
+                data = json.load(f)
+            except:
+                data = {}
+    else:
+        data = {}
+
+    new_count = 0
+    updated_count = 0
+
+    for record in records:
+        url = record["product"].get("link")
+        if not url:
+            continue
+
+        # Normalize URL (remove tracking params)
+        url = url.split("?")[0]
+        record["product"]["link"] = url
+
+        # Update scraped time
+        record["metadata"]["scraped_at"] = datetime.now().isoformat()
+
+        if url in data:
+            updated_count += 1
+        else:
+            new_count += 1
+
+        # Upsert
+        data[url] = record
+
+    # Save back to file
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+    print(f"New: {new_count} | Updated: {updated_count} | Total: {len(data)}")
+
+
 # Usage
 driver = create_brave_driver(
     headless=False,
@@ -192,6 +291,11 @@ driver = create_brave_driver(
 
 jumia_url = "https://www.jumia.com.eg/"
 
+# Get user input
+search_query = input("Enter product to search: ").strip()
+pages_to_scrape = int(input("Enter number of pages to scrape: ").strip())
+
+
 driver.get(jumia_url)
 
 wait = WebDriverWait(driver, 10)
@@ -201,13 +305,22 @@ popup_btn = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "cls")))
 
 popup_btn.click()
 
-products = get_all_products(driver, wait, query="iphone", pages=1)
+products = get_all_products(driver, wait, query=search_query, pages=pages_to_scrape)
+
 
 print("Total products:", len(products))
 
-for product in products[:3]:
+# Get extra info for each product (limit first if testing)
+for product in products:
     extra = get_product_extra_info(driver, wait, product["link"])
     product.update(extra)
 
-for p in products[:3]:
-    print(p)
+
+records = build_records(
+    products=products,
+    source="jumia",
+    search_query=search_query,
+    page_number=1,  # or page if you build per page
+)
+
+upsert_records(records)
