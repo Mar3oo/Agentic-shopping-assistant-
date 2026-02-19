@@ -5,6 +5,8 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+import time
+import random
 
 
 def create_brave_driver(
@@ -129,6 +131,43 @@ def get_all_products(driver, wait, query, pages=3):
     return all_products
 
 
+def get_product_extra_info(driver, wait, link):
+    # Open new tab
+    driver.execute_script("window.open('');")
+    driver.switch_to.window(driver.window_handles[-1])
+
+    driver.get(link)
+
+    wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+
+    details_text = None
+    seller_score = None
+
+    # Product description
+    try:
+        details_container = driver.find_element(
+            By.CSS_SELECTOR, "div.markup.-mhm.-pvl.-oxa.-sc"
+        )
+        details_text = details_container.text
+    except:
+        pass
+
+    # Seller score
+    try:
+        seller_score = driver.find_element(By.CSS_SELECTOR, "bdo.-m.-prxs").text
+    except:
+        pass
+
+    # Small delay (important to avoid blocking)
+    time.sleep(random.uniform(1, 2))
+
+    # Close tab
+    driver.close()
+    driver.switch_to.window(driver.window_handles[0])
+
+    return {"details_text": details_text, "seller_score": seller_score}
+
+
 # Usage
 driver = create_brave_driver(
     headless=False,
@@ -149,9 +188,13 @@ popup_btn = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "cls")))
 
 popup_btn.click()
 
-products = get_all_products(driver, wait, query="iphone", pages=3)
+products = get_all_products(driver, wait, query="iphone", pages=1)
 
 print("Total products:", len(products))
 
-for p in products[:5]:
+for product in products[:3]:
+    extra = get_product_extra_info(driver, wait, product["link"])
+    product.update(extra)
+
+for p in products[:3]:
     print(p)
