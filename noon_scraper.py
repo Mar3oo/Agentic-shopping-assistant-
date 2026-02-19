@@ -285,7 +285,7 @@ class NoonScraper:
             return None
         number = match.group(0).replace(",", "")
         try:
-            return f"{float(number):.2f}"
+            return round(float(number), 2)
         except Exception:
             return None
 
@@ -294,7 +294,12 @@ class NoonScraper:
         if not text:
             return None
         match = re.search(r"\b([0-5](?:\.\d+)?)\b", text)
-        return match.group(1) if match else None
+        if not match:
+            return None
+        try:
+            return float(match.group(1))
+        except Exception:
+            return None
 
     def _extract_json_objects(self, raw_text):
         text = (raw_text or "").replace("<!--", "").replace("-->", "").strip()
@@ -1069,14 +1074,18 @@ class NoonScraper:
         details_text = product.get("details_text")
         seller_score = product.get("seller_score")
         category = product.get("category")
+        has_numeric_price = isinstance(price, (int, float)) and not isinstance(price, bool)
+        has_numeric_seller_score = isinstance(seller_score, (int, float)) and not isinstance(
+            seller_score, bool
+        )
 
         if not title or len(title) <= 10:
             warnings.append("title length <= 10")
-        if not price or not re.search(r"\d", str(price)):
+        if not has_numeric_price:
             warnings.append("price missing numeric content")
         if not details_text or len(details_text) <= 80:
             warnings.append("details_text length <= 80")
-        if not seller_score or not re.fullmatch(r"\d+(?:\.\d+)?", str(seller_score)):
+        if not has_numeric_seller_score:
             warnings.append("seller_score is not numeric-only")
         if not category or category.strip().lower() == "home":
             warnings.append("category missing or equals Home")
@@ -1180,7 +1189,7 @@ class NoonScraper:
                         "source": "noon",
                         "scraped_at": datetime.utcnow().isoformat(),
                         "search_query": self.query,
-                        "page_number": str(page_number),
+                        "page_number": int(page_number),
                     },
                     "product": extracted_product,
                 }
