@@ -1,36 +1,84 @@
 import json
+import os
 import random
 import re
 import time
 from datetime import datetime
+from difflib import SequenceMatcher
 from html import unescape
 from urllib.parse import quote_plus, urlparse
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 
+def extract_sku(url):
+    match = re.search(r"/([A-Z0-9]+)\/p/", url)
+    return match.group(1) if match else None
+
+
 class NoonScraper:
     PRODUCT_CONTAINER_SELECTORS = [
         "[data-qa='product']",
+        "[data-qa='product-card']",
+        "[data-testid='product-card']",
+        "article[data-qa='product']",
+        "article[data-testid='product-card']",
+        "div[data-qa='product']",
+        "li[data-qa='product']",
+        "li[data-testid='product-card']",
         ".productContainer",
-        "div[class*='product']",
-        "article",
-        ".grid > div",
+        ".product-card",
+        ".ProductCard",
+        "[class*='productContainer']",
+        "[class*='ProductContainer']",
+        "[class*='productCard']",
+        "[class*='ProductCard']",
+        "main li:has(a[href*='/p/'])",
+        "main article:has(a[href*='/p/'])",
+        "main div:has(a[href*='/p/'])",
+        "section li:has(a[href*='/p/'])",
+        "section article:has(a[href*='/p/'])",
+        "section div:has(a[href*='/p/'])",
+        "ul li:has(a[href*='/product/'])",
+        "article:has(a[href*='/product/'])",
     ]
-    PRODUCT_LINK_SELECTOR = "a[href*='/p/'], a[href*='/product/']"
+    PRODUCT_LINK_SELECTOR = (
+        "a[href*='/p/'], "
+        "a[href*='/product/'], "
+        "a[data-qa='product-link'], "
+        "a[data-testid='product-link'], "
+        "[data-qa='product'] a[href], "
+        "[data-qa='product-card'] a[href], "
+        "[data-testid='product-card'] a[href]"
+    )
+    PRODUCT_FALLBACK_CARD_SELECTORS = [
+        "div:has(a[href*='/p/']):has(span[class*='priceNowText'])",
+        "div:has(a[href*='/p/']):has(span[class*='price'])",
+        "div:has(a[href*='/p/']):has([data-qa*='price'])",
+        "div:has(a[href*='/p/']):has([class*='price'])",
+        "li:has(a[href*='/p/']):has(span[class*='price'])",
+        "article:has(a[href*='/p/']):has(span[class*='price'])",
+        "div:has(a[href*='/product/']):has(span[class*='price'])",
+        "li:has(a[href*='/product/']):has(span[class*='price'])",
+        "article:has(a[href*='/product/']):has(span[class*='price'])",
+        "div:has(a[data-qa='product-link']):has(span[class*='price'])",
+        "div:has(a[data-testid='product-link']):has(span[class*='price'])",
+    ]
     PRODUCT_PRESENCE_SELECTORS = PRODUCT_CONTAINER_SELECTORS + [PRODUCT_LINK_SELECTOR]
 
     def __init__(self, query, max_pages=30):
         self.query = query
         self.max_pages = max_pages
-        self.products = []
-        self.seen_urls = set()
+        self.products = {}
+        self.seen_skus = set()
 
     def run(self):
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=False)
             context = browser.new_context()
             page = context.new_page()
+
+            self._load_existing_results()
 
             print("Opening Noon...")
             loaded_url, response = self._open_search_page(page)
@@ -44,7 +92,7 @@ class NoonScraper:
             page.mouse.wheel(0, 2500)
             time.sleep(1.5)
 
-            selector = self._wait_for_products_with_retry(page, timeout=60000)
+            selector = self._wait_for_products_with_retry(page, timeout=15000)
             if not selector:
                 print("No products found on first page - stopping")
                 browser.close()
@@ -58,7 +106,9 @@ class NoonScraper:
                     break
 
                 print(f"\nSCRAPING PAGE {current_page}")
-                self.scrape_page(page, current_page)
+                page_scraped = self.scrape_page(page, current_page)
+                if page_scraped is False:
+                    break
 
                 next_button = page.locator(
                     "a[rel='next'], a[aria-label='Next page']"
@@ -77,12 +127,12 @@ class NoonScraper:
                 next_button.click()
 
                 try:
-                    page.wait_for_url(lambda url: url != previous_url, timeout=30000)
+                    page.wait_for_url(lambda url: url != previous_url, timeout=15000)
                 except PlaywrightTimeoutError:
                     pass
 
                 try:
-                    page.wait_for_load_state("networkidle", timeout=30000)
+                    page.wait_for_load_state("domcontentloaded", timeout=15000)
                 except PlaywrightTimeoutError:
                     pass
 
@@ -103,6 +153,59 @@ class NoonScraper:
             browser.close()
             print("Browser closed")
 
+    def _get_output_filename(self):
+        safe_query = self.query.replace(" ", "_")
+        return f"noon_results_{safe_query}.json"
+
+    def _load_existing_results(self):
+        filename = self._get_output_filename()
+        if not os.path.exists(filename):
+            return
+
+        try:
+            with open(filename, "r", encoding="utf-8") as file:
+                existing = json.load(file)
+        except Exception as exc:
+            print(f"Could not load existing results from {filename}: {exc}")
+            return
+
+        loaded_count = 0
+
+        if isinstance(existing, dict):
+            for link, item in existing.items():
+                if not isinstance(item, dict):
+                    continue
+                canonical_link = (
+                    link
+                    or item.get("link")
+                    or item.get("url")
+                    or (item.get("product") or {}).get("link")
+                )
+                product_key = self._build_product_key(canonical_link)
+                if not product_key or product_key in self.products:
+                    continue
+                self.products[product_key] = item
+                self.seen_skus.add(product_key)
+                loaded_count += 1
+        elif isinstance(existing, list):
+            for item in existing:
+                if not isinstance(item, dict):
+                    continue
+                link = (
+                    item.get("url")
+                    or item.get("link")
+                    or (item.get("product") or {}).get("link")
+                )
+                product_key = self._build_product_key(link)
+                if not product_key or product_key in self.products:
+                    continue
+                self.products[product_key] = item
+                self.seen_skus.add(product_key)
+                loaded_count += 1
+
+        if loaded_count:
+            print(f"Loaded {loaded_count} existing products from {filename}")
+
     def _build_search_urls(self):
         encoded_query = quote_plus(self.query)
         return [
@@ -117,7 +220,7 @@ class NoonScraper:
             try:
                 print(f"Trying: {candidate}")
                 response = page.goto(
-                    candidate, wait_until="domcontentloaded", timeout=60000
+                    candidate, wait_until="domcontentloaded", timeout=15000
                 )
                 if not self._is_404_page(page, response):
                     return candidate, response
@@ -219,24 +322,32 @@ class NoonScraper:
 
     # PAGINATION FIX
     def _validate_pagination_products(self, page):
-        self._wait_for_product_grid(page, timeout=25000)
-        products = page.query_selector_all("a[href*='/p/'], a[href*='/product/']")
+        try:
+            page.wait_for_load_state("domcontentloaded", timeout=15000)
+        except PlaywrightTimeoutError:
+            pass
+
+        try:
+            page.wait_for_selector("a[href*='/p/']", timeout=15000)
+        except PlaywrightTimeoutError:
+            pass
+
+        self._wait_for_product_grid(page, timeout=15000)
+        products = page.query_selector_all("a[href*='/p/']")
         product_count = len(products)
 
         if product_count == 0:
-            print("No products found - ending pagination")
-            return False
-
-        if product_count < 3:
+            page.mouse.wheel(0, 1500)
             time.sleep(3)
-            products = page.query_selector_all("a[href*='/p/'], a[href*='/product/']")
-            if len(products) == 0:
+            products = page.query_selector_all("a[href*='/p/']")
+            product_count = len(products)
+            if product_count == 0:
                 print("No products found - ending pagination")
                 return False
 
         return True
 
-    def _wait_for_products_with_retry(self, page, timeout=60000, max_retries=2):
+    def _wait_for_products_with_retry(self, page, timeout=15000, max_retries=2):
         for attempt in range(max_retries + 1):
             try:
                 return self.wait_for_products(page, timeout)
@@ -253,7 +364,7 @@ class NoonScraper:
                 time.sleep(1)
         return None
 
-    def wait_for_products(self, page, timeout=60000):
+    def wait_for_products(self, page, timeout=15000):
         per_selector_timeout = max(
             1500, timeout // max(1, len(self.PRODUCT_PRESENCE_SELECTORS))
         )
@@ -273,9 +384,10 @@ class NoonScraper:
             if cards.count() > 0:
                 return cards, selector
 
-        links = page.locator(self.PRODUCT_LINK_SELECTOR)
-        if links.count() > 0:
-            return links, self.PRODUCT_LINK_SELECTOR
+        for fallback_selector in self.PRODUCT_FALLBACK_CARD_SELECTORS:
+            fallback_cards = page.locator(fallback_selector)
+            if fallback_cards.count() > 0:
+                return fallback_cards, fallback_selector
 
         return page.locator("div.__no_products__"), ""
 
@@ -284,6 +396,65 @@ class NoonScraper:
             return None
         text = " ".join(str(value).replace("\xa0", " ").split())
         return text or None
+
+    def _build_product_key(self, url):
+        cleaned_url = self._clean_text(url)
+        if not cleaned_url:
+            return None
+        sku = extract_sku(cleaned_url)
+        if sku:
+            return sku
+        if re.fullmatch(r"[A-Z0-9]+", cleaned_url):
+            return cleaned_url
+        return None
+
+    def _title_matches_query(self, title):
+        query_text = (self._clean_text(self.query) or "").lower()
+        query_text = re.sub(r"\s+", " ", query_text).strip()
+        if not query_text:
+            return True
+
+        title_text = (self._clean_text(title) or "").lower()
+        title_text = re.sub(
+            r"[\U0001F1E0-\U0001FAFF\U00002700-\U000027BF\U00002600-\U000026FF]+",
+            " ",
+            title_text,
+        )
+        title_text = title_text.replace("best seller", " ")
+        title_text = title_text.replace("ramadan deals", " ")
+        title_text = re.sub(r"\s+", " ", title_text).strip()
+        if not title_text:
+            return False
+
+        if query_text in title_text:
+            return True
+
+        query_words = [word for word in re.findall(r"[a-z0-9]+", query_text) if word]
+        generic_words = {
+            "mobile",
+            "mobiles",
+            "phone",
+            "phones",
+            "smartphone",
+            "smartphones",
+            "cell",
+            "cellphone",
+            "seller",
+            "best",
+            "deal",
+            "deals",
+            "ramadan",
+        }
+        core_query_words = [word for word in query_words if word not in generic_words]
+        if not core_query_words:
+            return True
+
+        if any(word in title_text for word in core_query_words):
+            return True
+
+        compact_query = " ".join(core_query_words)
+        similarity = SequenceMatcher(None, compact_query, title_text).ratio()
+        return similarity >= 0.4
 
     def _normalize_price(self, value):
         text = self._clean_text(value)
@@ -1136,13 +1307,36 @@ class NoonScraper:
         if product["category"] is None:
             product["category"] = self._extract_category(page)
 
-        product["details_text"] = self._extract_details_text(page, product["title"])
+        product["details_text"] = self._extract_details_from_json_ld(
+            page, product["title"]
+        )
         self._validate_extracted_product(product, url)
         return product
 
     def scrape_page(self, page, page_number):
+        try:
+            page.wait_for_load_state("domcontentloaded", timeout=15000)
+        except PlaywrightTimeoutError:
+            pass
+
+        try:
+            page.wait_for_selector("a[href*='/p/']", timeout=15000)
+        except PlaywrightTimeoutError:
+            pass
+
+        page.mouse.wheel(0, 1200)
+        time.sleep(0.5)
+
         product_cards, selector = self.get_product_cards(page)
         count = product_cards.count()
+        if count == 0:
+            page.mouse.wheel(0, 1800)
+            time.sleep(3)
+            product_cards, selector = self.get_product_cards(page)
+            count = product_cards.count()
+            if count == 0:
+                print("No products found on this page after retry")
+                return False
         print(f"Found {count} product containers using selector: {selector or 'none'}")
 
         for i in range(count):
@@ -1151,7 +1345,7 @@ class NoonScraper:
                 link = (
                     card
                     if selector == self.PRODUCT_LINK_SELECTOR
-                    else card.locator("a[href]").first
+                    else card.locator(self.PRODUCT_LINK_SELECTOR).first
                 )
                 url = link.get_attribute("href")
                 if not url:
@@ -1160,9 +1354,12 @@ class NoonScraper:
                 if not url.startswith("http"):
                     url = "https://www.noon.com" + url
 
-                if url in self.seen_urls:
+                product_key = self._build_product_key(url)
+                if not product_key:
                     continue
-                self.seen_urls.add(url)
+
+                if product_key in self.seen_skus:
+                    continue
 
                 name = link.inner_text().strip()
                 if not name and selector != self.PRODUCT_LINK_SELECTOR:
@@ -1179,32 +1376,41 @@ class NoonScraper:
                     "link": url,
                 }
 
-                current_search_url = page.url
                 if url and url.startswith("http"):
+                    product_page = None
                     try:
                         print(f"    Fetching details for: {name[:30]}...")
-                        product_page_response = page.goto(
-                            url, wait_until="domcontentloaded", timeout=30000
+                        product_page = page.context.new_page()
+                        product_page_response = product_page.goto(
+                            url, wait_until="domcontentloaded", timeout=15000
                         )
 
                         if (
                             product_page_response
                             and product_page_response.status == 200
                         ):
-                            time.sleep(1)
-                            extracted_product = self._extract_product_details(page, url)
+                            try:
+                                product_page.wait_for_selector(
+                                    "main h1, span[class*='ProductTitle'], h1",
+                                    timeout=3000,
+                                )
+                            except PlaywrightTimeoutError:
+                                pass
+                            extracted_product = self._extract_product_details(
+                                product_page, url
+                            )
                     except Exception as e:
                         print(f"    Error fetching product details: {str(e)[:50]}")
                     finally:
-                        try:
-                            page.goto(
-                                current_search_url,
-                                wait_until="domcontentloaded",
-                                timeout=30000,
-                            )
-                            time.sleep(0.5)
-                        except Exception:
-                            pass
+                        if product_page:
+                            try:
+                                product_page.close()
+                            except Exception:
+                                pass
+
+                product_title = extracted_product.get("title") or name
+                if not self._title_matches_query(product_title):
+                    continue
 
                 product_data = {
                     "metadata": {
@@ -1216,43 +1422,25 @@ class NoonScraper:
                     "product": extracted_product,
                 }
 
-                # FILTERING FIX
-                category_value = extracted_product.get("category")
-                title_value = extracted_product.get("title")
-                allow_product = False
-
-                if isinstance(category_value, str):
-                    category_lower = category_value.lower()
-                    if any(
-                        keyword in category_lower for keyword in ("laptop", "notebook")
-                    ):
-                        allow_product = True
-
-                if not allow_product and isinstance(title_value, str):
-                    title_lower = title_value.lower()
-                    if any(
-                        keyword in title_lower for keyword in ("laptop", "notebook")
-                    ):
-                        allow_product = True
-
-                if not allow_product:
+                if product_key in self.products:
                     continue
-
-                self.products.append(product_data)
+                self.products[product_key] = product_data
+                self.seen_skus.add(product_key)
                 print(f"  OK {name[:40]}")
             except Exception as exc:
                 print(f"  Error on product {i}: {str(exc)[:80]}")
                 continue
 
+        return True
+
     def save_results(self):
-        safe_query = self.query.replace(" ", "_")
-        filename = f"noon_results_{safe_query}.json"
+        filename = self._get_output_filename()
         with open(filename, "w", encoding="utf-8") as file:
             json.dump(self.products, file, indent=4, ensure_ascii=False)
-        print(f"\nSaved {len(self.products)} products to {filename}")
+        print(f"\nSaved {len(self.products)} unique products to {filename}")
 
 
 if __name__ == "__main__":
     query = input("Enter product search query: ")
-    scraper = NoonScraper(query=query, max_pages=2)
+    scraper = NoonScraper(query=query, max_pages=1)
     scraper.run()
