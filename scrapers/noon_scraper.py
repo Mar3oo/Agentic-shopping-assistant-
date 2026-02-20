@@ -60,7 +60,9 @@ class NoonScraper:
                 print(f"\nSCRAPING PAGE {current_page}")
                 self.scrape_page(page, current_page)
 
-                next_button = page.locator("a[rel='next'], a[aria-label='Next page']").first
+                next_button = page.locator(
+                    "a[rel='next'], a[aria-label='Next page']"
+                ).first
                 if next_button.count() == 0:
                     print("No next button found - stopping")
                     break
@@ -114,7 +116,9 @@ class NoonScraper:
         for candidate in self._build_search_urls():
             try:
                 print(f"Trying: {candidate}")
-                response = page.goto(candidate, wait_until="domcontentloaded", timeout=60000)
+                response = page.goto(
+                    candidate, wait_until="domcontentloaded", timeout=60000
+                )
                 if not self._is_404_page(page, response):
                     return candidate, response
                 status = getattr(response, "status", None)
@@ -145,7 +149,11 @@ class NoonScraper:
 
     def _is_404_page(self, page, response=None):
         try:
-            if response and hasattr(response, "status") and response.status in (404, 410):
+            if (
+                response
+                and hasattr(response, "status")
+                and response.status in (404, 410)
+            ):
                 return True
 
             parsed = urlparse(page.url)
@@ -159,7 +167,9 @@ class NoonScraper:
 
             body_text = ""
             try:
-                body_text = page.locator("body").inner_text(timeout=5000).strip().lower()
+                body_text = (
+                    page.locator("body").inner_text(timeout=5000).strip().lower()
+                )
             except Exception:
                 pass
 
@@ -268,7 +278,6 @@ class NoonScraper:
             return links, self.PRODUCT_LINK_SELECTOR
 
         return page.locator("div.__no_products__"), ""
-
 
     def _clean_text(self, value):
         if value is None:
@@ -500,7 +509,9 @@ class NoonScraper:
             lowered = compact.lower()
             if lowered in ("product overview", "overview"):
                 continue
-            if title_clean and (lowered == title_clean or lowered.startswith(title_clean)):
+            if title_clean and (
+                lowered == title_clean or lowered.startswith(title_clean)
+            ):
                 continue
             if re.search(breadcrumb_pattern, lowered):
                 continue
@@ -522,7 +533,7 @@ class NoonScraper:
             return None
 
         if title_clean and merged.lower().startswith(title_clean):
-            merged = self._clean_text(merged[len(title_clean):])
+            merged = self._clean_text(merged[len(title_clean) :])
 
         return merged
 
@@ -617,7 +628,9 @@ class NoonScraper:
 
                     value = node.get("description")
                     if isinstance(value, list):
-                        value = " ".join(str(item) for item in value if item is not None)
+                        value = " ".join(
+                            str(item) for item in value if item is not None
+                        )
                     if not isinstance(value, str):
                         continue
 
@@ -845,7 +858,9 @@ class NoonScraper:
 
         highlights = []
         for item in raw.get("highlights") or []:
-            cleaned_item = self._clean_details_text(item, title) or self._clean_text(item)
+            cleaned_item = self._clean_details_text(item, title) or self._clean_text(
+                item
+            )
             if not cleaned_item:
                 continue
             if self._details_has_forbidden_content(cleaned_item):
@@ -867,7 +882,9 @@ class NoonScraper:
         if overview:
             sections.append(f"Product Overview:\n{overview}")
         if highlights:
-            sections.append("Highlights:\n" + "\n".join(f"- {point}" for point in highlights))
+            sections.append(
+                "Highlights:\n" + "\n".join(f"- {point}" for point in highlights)
+            )
         if specifications:
             sections.append("Specifications:\n" + "\n".join(specifications))
 
@@ -1074,10 +1091,12 @@ class NoonScraper:
         details_text = product.get("details_text")
         seller_score = product.get("seller_score")
         category = product.get("category")
-        has_numeric_price = isinstance(price, (int, float)) and not isinstance(price, bool)
-        has_numeric_seller_score = isinstance(seller_score, (int, float)) and not isinstance(
-            seller_score, bool
+        has_numeric_price = isinstance(price, (int, float)) and not isinstance(
+            price, bool
         )
+        has_numeric_seller_score = isinstance(
+            seller_score, (int, float)
+        ) and not isinstance(seller_score, bool)
 
         if not title or len(title) <= 10:
             warnings.append("title length <= 10")
@@ -1168,7 +1187,10 @@ class NoonScraper:
                             url, wait_until="domcontentloaded", timeout=30000
                         )
 
-                        if product_page_response and product_page_response.status == 200:
+                        if (
+                            product_page_response
+                            and product_page_response.status == 200
+                        ):
                             time.sleep(1)
                             extracted_product = self._extract_product_details(page, url)
                     except Exception as e:
@@ -1201,12 +1223,16 @@ class NoonScraper:
 
                 if isinstance(category_value, str):
                     category_lower = category_value.lower()
-                    if any(keyword in category_lower for keyword in ("laptop", "notebook")):
+                    if any(
+                        keyword in category_lower for keyword in ("laptop", "notebook")
+                    ):
                         allow_product = True
 
                 if not allow_product and isinstance(title_value, str):
                     title_lower = title_value.lower()
-                    if any(keyword in title_lower for keyword in ("laptop", "notebook")):
+                    if any(
+                        keyword in title_lower for keyword in ("laptop", "notebook")
+                    ):
                         allow_product = True
 
                 if not allow_product:
