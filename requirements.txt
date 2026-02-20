@@ -24,4 +24,4 @@ trio-typing==0.10.0
 trio-websocket==0.12.2
 types-certifi==2021.10.8.3
 types-urllib3==1.26.25.14
-typing_extensions==4.15_
+typing_extensions==4.15
