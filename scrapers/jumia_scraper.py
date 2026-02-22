@@ -75,7 +75,16 @@ def create_brave_driver(
     chrome_options.add_experimental_option("detach", True)
 
     # Create driver using webdriver-manager
-    service = Service(ChromeDriverManager().install())
+    driver_path = ChromeDriverManager().install()
+
+    # webdriver-manager can return a non-executable metadata file on Windows.
+    # Normalize to the actual chromedriver binary if needed.
+    if not driver_path.lower().endswith(".exe"):
+        exe_path = os.path.join(os.path.dirname(driver_path), "chromedriver.exe")
+        if os.path.exists(exe_path):
+            driver_path = exe_path
+
+    service = Service(driver_path)
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     return driver
