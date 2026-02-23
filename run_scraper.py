@@ -1,11 +1,11 @@
 from scrapers.base import create_brave_driver, build_records, upsert_records
-from scrapers import jumia, noon
+from scrapers import amazon, jumia, noon
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 import time
 
-site = input("Choose site (jumia/noon): ").strip().lower()
+site = input("Choose site (amazon/jumia/noon): ").strip().lower()
 query = input("Enter product: ")
 pages = int(input("Pages: "))
 
@@ -41,6 +41,19 @@ elif site == "noon":
 
     records = build_records(products, "noon", query, 1, noon.normalize_product)
     upsert_records(records, "data/noon.json")
+
+elif site == "amazon":
+    driver.get("https://www.amazon.eg")
+
+    products = amazon.get_all_products(driver, wait, query, pages)
+
+    time.sleep(2)
+
+    for p in products:
+        p.update(amazon.get_product_extra_info(driver, wait, p["link"]))
+
+    records = build_records(products, "amazon", query, 1, amazon.normalize_product)
+    upsert_records(records, "data/amazon.json")
 
 else:
     print("Invalid site")
