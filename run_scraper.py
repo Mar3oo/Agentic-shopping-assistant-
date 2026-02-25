@@ -1,59 +1,107 @@
-from scrapers.base import create_brave_driver, build_records, upsert_records
-from scrapers import amazon, jumia, noon
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
+"""CLI orchestrator for scraping product data and ingesting normalized records into MongoDB."""
+
 import time
 
-site = input("Choose site (amazon/jumia/noon): ").strip().lower()
-query = input("Enter product: ")
-pages = int(input("Pages: "))
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
-driver = create_brave_driver(incognito=True)
-wait = WebDriverWait(driver, 10)
+from Data_Base.db import close_client
+from Data_Base.ingestion import ingest_records
+from scrapers import amazon, jumia, noon
+from scrapers.base import build_records, create_brave_driver
 
-if site == "jumia":
+
+def _prepare_jumia(driver, wait):
+    """Open Jumia home page and dismiss popup when available."""
     driver.get("https://www.jumia.com.eg/")
+    try:
+        popup_btn = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "cls")))
+        popup_btn.click()
+    except Exception:
+        pass
 
-    # Wait until the popup button appears and is clickable
-    popup_btn = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "cls")))
 
-    popup_btn.click()
-
-    products = jumia.get_all_products(driver, wait, query, pages)
-
-    for p in products:
-        p.update(jumia.get_product_extra_info(driver, wait, p["link"]))
-
-    records = build_records(products, "jumia", query, 1, jumia.normalize_product)
-    upsert_records(records, "data/jumia.json")
-
-elif site == "noon":
+def _prepare_noon(driver, _wait):
+    """Open Noon landing page and trigger initial lazy content load."""
     driver.get("https://www.noon.com/egypt-en/")
-
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
     time.sleep(2)
 
-    products = noon.get_all_products(driver, wait, query, pages)
 
-    for p in products:
-        p.update(noon.get_product_extra_info(driver, wait, p["link"]))
-
-    records = build_records(products, "noon", query, 1, noon.normalize_product)
-    upsert_records(records, "data/noon.json")
-
-elif site == "amazon":
+def _prepare_amazon(driver, _wait):
+    """Open Amazon Egypt landing page."""
     driver.get("https://www.amazon.eg")
 
-    products = amazon.get_all_products(driver, wait, query, pages)
 
-    time.sleep(2)
+SCRAPER_MAP = {
+    "amazon": (amazon, _prepare_amazon),
+    "jumia": (jumia, _prepare_jumia),
+    "noon": (noon, _prepare_noon),
+}
 
-    for p in products:
-        p.update(amazon.get_product_extra_info(driver, wait, p["link"]))
 
-    records = build_records(products, "amazon", query, 1, amazon.normalize_product)
-    upsert_records(records, "data/amazon.json")
+def run_scraping(site: str, query: str, pages: int) -> None:
+    """Execute the full pipeline: scrape -> enrich -> build records -> ingest."""
+    selected_site = site.strip().lower()
+    scraper_entry = SCRAPER_MAP.get(selected_site)
 
-else:
-    print("Invalid site")
+    if scraper_entry is None:
+        print("Invalid site")
+        return
+
+    scraper_module, prepare_fn = scraper_entry
+    driver = create_brave_driver(incognito=True)
+    wait = WebDriverWait(driver, 10)
+
+    try:
+        prepare_fn(driver, wait)
+
+        products = scraper_module.get_all_products(driver, wait, query, pages)
+
+        for product in products:
+            link = product.get("link")
+            if not link:
+                continue
+
+            try:
+                extra_info = scraper_module.get_product_extra_info(driver, wait, link)
+                product.update(extra_info)
+            except Exception:
+                # Keep the pipeline moving if one details page fails.
+                continue
+
+        records = build_records(
+            products,
+            selected_site,
+            query,
+            1,
+            scraper_module.normalize_product,
+        )
+
+        summary = ingest_records(records)
+
+        print(
+            f"Source: {selected_site} | Scraped: {len(products)} | "
+            f"Inserted: {summary['inserted']} | "
+            f"Skipped: {summary['skipped']} | Failed: {summary['failed']}"
+        )
+    finally:
+        driver.quit()
+        close_client()
+
+
+if __name__ == "__main__":
+    site = input("Choose site (amazon/jumia/noon): ").strip().lower()
+    query = input("Enter product: ").strip()
+
+    try:
+        pages = int(input("Pages: ").strip())
+    except ValueError:
+        pages = 1
+        print("Invalid pages value. Defaulting to 1.")
+
+    if pages < 1:
+        pages = 1
+
+    run_scraping(site, query, pages)

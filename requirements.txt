@@ -1,3 +1,4 @@
+# Dependency versions for scraping and MongoDB ingestion runtime.
 async-generator==1.10
 attrs==25.4.0
 certifi==2026.1.4
@@ -13,6 +14,7 @@ packaging==26.0
 playwright==1.58.0
 pycparser==3.0
 pyee==13.0.1
+pymongo==4.10.1
 PySocks==1.7.1
 python-dotenv==1.2.1
 requests==2.32.5
