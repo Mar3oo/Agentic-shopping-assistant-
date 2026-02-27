@@ -1,22 +1,24 @@
-import time
+"""Amazon scraper that collects products, auto-paginates, and normalizes product fields."""
+
 import random
-from selenium.webdriver.support.ui import WebDriverWait as wait
+import re
+import time
+from urllib.parse import quote_plus
+
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-from urllib.parse import quote_plus
+
+from .base import load_url_with_retry
 
 
 def get_products(driver):
+    """Extract product title, price, and link from the current Amazon results page."""
     products = []
-
-    # Wait for product cards
-    items = wait(driver, 10).until(
-        EC.presence_of_all_elements_located(
-            (By.XPATH, '//div[contains(@class,"s-result-item") and @data-asin]')
-        )
+    items = driver.find_elements(
+        By.XPATH,
+        '//div[contains(@class,"s-result-item") and @data-asin]',
     )
-
-    print(f"Products found: {len(items)}")
 
     for item in items:
         try:
@@ -24,109 +26,137 @@ def get_products(driver):
                 By.CSS_SELECTOR,
                 "h2.a-size-base-plus.a-spacing-none.a-color-base.a-text-normal span",
             ).text
-        except:
+        except Exception:
             title = None
 
-        # Price
         try:
             price_whole = item.find_element(By.CSS_SELECTOR, "span.a-price-whole").text
-            price_fraction = item.find_element(
-                By.CSS_SELECTOR, "span.a-price-fraction"
-            ).text
-            price = price_whole + "." + price_fraction
-        except:
+            price_fraction = item.find_element(By.CSS_SELECTOR, "span.a-price-fraction").text
+            price = f"{price_whole}.{price_fraction}"
+        except Exception:
             price = None
 
-        # Link
         try:
             link = item.find_element(
                 By.CSS_SELECTOR,
                 "a.a-link-normal.s-line-clamp-4.s-link-style.a-text-normal",
             ).get_attribute("href")
-        except:
+        except Exception:
             link = None
-        if link:  # avoid empty cards
+
+        if link and title and price:
             products.append({"title": title, "price": price, "link": link})
 
     return products
 
 
-def get_all_products(driver, wait, query, pages=3):
+def _has_next_page(driver, current_page):
+    """Return True when Amazon has a valid next-page control."""
+    try:
+        next_btn = driver.find_element(By.CSS_SELECTOR, "a.s-pagination-next")
+        classes = (next_btn.get_attribute("class") or "").lower()
+        href = next_btn.get_attribute("href")
+        if href and "s-pagination-disabled" not in classes:
+            return True
+    except Exception:
+        pass
+
+    next_page = current_page + 1
+    return bool(driver.find_elements(By.XPATH, f"//a[contains(@href, 'page={next_page}')]"))
+
+
+def get_all_products(driver, wait, query):
+    """Scrape all available result pages for a query using automatic pagination."""
     all_products = []
-
     query_encoded = quote_plus(query)
+    page_num = 1
 
-    for page in range(1, pages + 1):
-        url = f"https://www.amazon.eg/s?k={query_encoded}&page={page}"
-        print(f"Scraping page {page}")
+    while True:
+        url = f"https://www.amazon.eg/s?k={query_encoded}&page={page_num}"
+        print(f"Scraping page {page_num}")
         print("URL:", url)
 
-        driver.get(url)
-
-        # Wait for product cards to load
-        wait.until(
-            EC.presence_of_element_located(
-                (By.XPATH, '//div[contains(@class,"s-result-item") and @data-asin]')
+        try:
+            load_url_with_retry(
+                driver,
+                wait,
+                url,
+                lambda w: w.until(
+                    EC.presence_of_element_located(
+                        (By.XPATH, '//div[contains(@class,"s-result-item") and @data-asin]')
+                    )
+                ),
+                max_attempts=3,
             )
-        )
-
-        # # Amazon sometimes lazy-loads results
-        # driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        # time.sleep(2)
+        except (TimeoutException, WebDriverException):
+            break
 
         products = get_products(driver)
         print("Products found:", len(products))
 
+        if not products:
+            break
+
         all_products.extend(products)
 
-        # Small delay between pages (important for Amazon)
-        time.sleep(3)
+        if not _has_next_page(driver, page_num):
+            break
+
+        page_num += 1
+        time.sleep(random.uniform(2, 4))
 
     return all_products
 
 
 def get_product_extra_info(driver, wait, link):
-    # Open new tab
-    driver.execute_script("window.open('');")
-    driver.switch_to.window(driver.window_handles[-1])
-
-    driver.get(link)
-
-    # Wait for main product title (better than waiting for body)
-    wait.until(EC.presence_of_element_located((By.ID, "productTitle")))
-
+    """Open an Amazon product page in a new tab and extract details metadata."""
     details_text = None
     seller_score = None
     category = None
 
-    try:
-        details_text = driver.find_element(By.CSS_SELECTOR, "#productDescription").text
-    except:
-        pass
+    driver.execute_script("window.open('');")
+    driver.switch_to.window(driver.window_handles[-1])
 
-    # Rating (Amazon shows rating like "4.5 out of 5 stars")
     try:
-        seller_score = driver.find_element(
-            By.CSS_SELECTOR, "span.a-size-small.a-color-base"
-        ).text
-    except:
-        pass
-
-    # Category / Breadcrumb
-    try:
-        breadcrumbs = driver.find_elements(
-            By.CSS_SELECTOR, "#wayfinding-breadcrumbs_feature_div ul li a"
+        load_url_with_retry(
+            driver,
+            wait,
+            link,
+            lambda w: w.until(EC.presence_of_element_located((By.ID, "productTitle"))),
+            max_attempts=2,
+            min_delay=1.5,
+            max_delay=3.0,
         )
-        category = ",".join([b.text.strip() for b in breadcrumbs if b.text.strip()])
-    except:
+
+        try:
+            details_text = driver.find_element(By.CSS_SELECTOR, "#productDescription").text
+        except Exception:
+            pass
+
+        try:
+            seller_score = driver.find_element(
+                By.CSS_SELECTOR,
+                "span.a-size-small.a-color-base",
+            ).text
+        except Exception:
+            pass
+
+        try:
+            breadcrumbs = driver.find_elements(
+                By.CSS_SELECTOR,
+                "#wayfinding-breadcrumbs_feature_div ul li a",
+            )
+            category = ",".join([b.text.strip() for b in breadcrumbs if b.text.strip()])
+        except Exception:
+            pass
+
+        time.sleep(random.uniform(1.5, 2.5))
+    except (TimeoutException, WebDriverException):
         pass
-
-    # Small delay (important for Amazon)
-    time.sleep(random.uniform(1.5, 2.5))
-
-    # Close tab
-    driver.close()
-    driver.switch_to.window(driver.window_handles[0])
+    finally:
+        if len(driver.window_handles) > 1:
+            driver.close()
+            driver.switch_to.window(driver.window_handles[0])
 
     return {
         "details_text": details_text,
@@ -135,51 +165,34 @@ def get_product_extra_info(driver, wait, link):
     }
 
 
-import re
-
-
 def normalize_product(product):
-
-    # ---------- URL (extract ASIN) ----------
+    """Normalize Amazon product URL, price, seller score, and text fields."""
     if product.get("link"):
         url = product["link"]
-
-        # Extract ASIN from /dp/ASIN
         match = re.search(r"/dp/([A-Z0-9]{10})", url)
         if match:
             asin = match.group(1)
             product["link"] = f"https://www.amazon.eg/dp/{asin}"
         else:
-            # fallback: remove parameters
-            url = url.split("?")[0].split("#")[0]
-            product["link"] = url.strip()
+            product["link"] = url.split("?")[0].split("#")[0].strip()
 
-    # ---------- Price ----------
     if product.get("price"):
-        price_text = product["price"]
-
-        # Remove commas and any non-numeric except dot
-        price_text = re.sub(r"[^\d.]", "", price_text)
-
+        price_text = re.sub(r"[^\d.]", "", str(product["price"]))
         try:
             product["price"] = float(price_text)
-        except:
+        except Exception:
             product["price"] = None
 
-    # ---------- Seller score (convert to 0–1 scale) ----------
     if product.get("seller_score"):
-        score_text = product["seller_score"]
-
-        # Extract number (handles "4.5 out of 5 stars" or "4.5")
+        score_text = str(product["seller_score"])
         match = re.search(r"\d+(\.\d+)?", score_text)
         if match:
             product["seller_score"] = float(match.group()) / 5
         else:
             product["seller_score"] = None
 
-    # ---------- Clean text fields ----------
     for field in ["title", "details_text", "category"]:
         if product.get(field):
-            product[field] = " ".join(product[field].split())
+            product[field] = " ".join(str(product[field]).split())
 
     return product

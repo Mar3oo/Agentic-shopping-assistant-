@@ -1,128 +1,159 @@
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-import time
+"""Noon scraper that collects products, auto-paginates, and normalizes product fields."""
+
 import random
 import re
+import time
 from urllib.parse import quote_plus
+
+from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+
+from .base import load_url_with_retry
 
 
 def get_products_noon(driver):
-    """
-    Extract product title, price, and link from Noon search page.
-    Returns a list of dictionaries.
-    """
-
+    """Extract product title, price, and link from the current Noon results page."""
     products = []
+    product_cards = driver.find_elements(By.CSS_SELECTOR, "div[data-qa='plp-product-box']")
 
-    PRODUCT_CARD_SELECTOR = "div[data-qa='plp-product-box']"
-
-    TITLE_SELECTOR = "h2[data-qa='plp-product-box-name']"
-    PRICE_SELECTOR = "strong[class*='amount']"
-    LINK_SELECTOR = "a[href*='/p/']"  # this one is usually correct
-
-    items = driver.find_elements(By.CSS_SELECTOR, PRODUCT_CARD_SELECTOR)
-
-    print(f"Found {len(items)} product cards")
-
-    for item in items:
+    for item in product_cards:
         try:
-            title = item.find_element(By.CSS_SELECTOR, TITLE_SELECTOR).text
-        except:
+            title = item.find_element(By.CSS_SELECTOR, "h2[data-qa='plp-product-box-name']").text
+        except Exception:
             title = None
 
         try:
-            price = item.find_element(By.CSS_SELECTOR, PRICE_SELECTOR).text
-        except:
+            price = item.find_element(By.CSS_SELECTOR, "strong[class*='amount']").text
+        except Exception:
             price = None
 
         try:
-            link = item.find_element(By.CSS_SELECTOR, LINK_SELECTOR).get_attribute(
-                "href"
-            )
-        except:
+            link = item.find_element(By.CSS_SELECTOR, "a[href*='/p/']").get_attribute("href")
+        except Exception:
             link = None
 
-        if link:  # avoid empty cards
+        if link and title and price:
             products.append({"title": title, "price": price, "link": link})
 
     return products
 
 
-def get_all_products(driver, wait, query, pages=3):
+def _has_next_page(driver, current_page):
+    """Return True when Noon has a valid next-page control."""
+    selectors = [
+        "a[rel='next']",
+        "a[aria-label*='Next']",
+        "a[data-qa*='next']",
+    ]
+
+    for selector in selectors:
+        for element in driver.find_elements(By.CSS_SELECTOR, selector):
+            href = element.get_attribute("href")
+            classes = (element.get_attribute("class") or "").lower()
+            if href and "disabled" not in classes:
+                return True
+
+    next_page = current_page + 1
+    return bool(driver.find_elements(By.XPATH, f"//a[contains(@href, 'page={next_page}')]"))
+
+
+def get_all_products(driver, wait, query):
+    """Scrape all available result pages for a query using automatic pagination."""
     all_products = []
-
     query_encoded = quote_plus(query)
+    page_num = 1
 
-    for page in range(1, pages + 1):
-        url = f"https://www.noon.com/egypt-en/search?q={query_encoded}&page={page}"
-        print(f"Scraping page {page}")
+    while True:
+        url = f"https://www.noon.com/egypt-en/search?q={query_encoded}&page={page_num}"
+        print(f"Scraping page {page_num}")
         print("URL:", url)
 
-        driver.get(url)
-
-        # Wait for products to load
-        wait.until(
-            EC.visibility_of_element_located(
-                (By.CSS_SELECTOR, "div[data-qa='plp-product-box']")
+        try:
+            load_url_with_retry(
+                driver,
+                wait,
+                url,
+                lambda w: w.until(
+                    EC.visibility_of_element_located(
+                        (By.CSS_SELECTOR, "div[data-qa='plp-product-box']")
+                    )
+                ),
+                max_attempts=3,
             )
-        )
+        except (TimeoutException, WebDriverException):
+            break
 
-        # Noon lazy loads → scroll once
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(2)
 
         products = get_products_noon(driver)
         print("Products found:", len(products))
 
+        if not products:
+            break
+
         all_products.extend(products)
+
+        if not _has_next_page(driver, page_num):
+            break
+
+        page_num += 1
+        time.sleep(random.uniform(2, 4))
 
     return all_products
 
 
 def get_product_extra_info(driver, wait, link):
-    # Open new tab
-    driver.execute_script("window.open('');")
-    driver.switch_to.window(driver.window_handles[-1])
-
-    driver.get(link)
-
-    wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-
+    """Open a Noon product page in a new tab and extract details metadata."""
     details_text = None
     seller_score = None
     category = None
 
-    # Product description
+    driver.execute_script("window.open('');")
+    driver.switch_to.window(driver.window_handles[-1])
+
     try:
-        details_container = driver.find_element(
-            By.CSS_SELECTOR, "div[class*='overview'], div[id*='overview']"
+        load_url_with_retry(
+            driver,
+            wait,
+            link,
+            lambda w: w.until(EC.presence_of_element_located((By.TAG_NAME, "body"))),
+            max_attempts=2,
+            min_delay=1.5,
+            max_delay=3.0,
         )
-        details_text = details_container.text
-    except:
+
+        try:
+            details_container = driver.find_element(
+                By.CSS_SELECTOR,
+                "div[class*='overview'], div[id*='overview']",
+            )
+            details_text = details_container.text
+        except Exception:
+            pass
+
+        try:
+            seller_score = driver.find_element(
+                By.CSS_SELECTOR,
+                "div[class*='rating'] span",
+            ).text
+        except Exception:
+            pass
+
+        try:
+            breadcrumbs = driver.find_elements(By.CSS_SELECTOR, "a[class*='breadcrumb']")
+            category = ",".join([b.text.strip() for b in breadcrumbs if b.text.strip()])
+        except Exception:
+            pass
+
+        time.sleep(random.uniform(1, 2))
+    except (TimeoutException, WebDriverException):
         pass
-
-    # Seller score
-    try:
-        seller_score = driver.find_element(
-            By.CSS_SELECTOR, "div[class*='rating'] span"
-        ).text
-    except:
-        pass
-
-    # Category / Breadcrumb
-
-    try:
-        breadcrumbs = driver.find_elements(By.CSS_SELECTOR, "a[class*='breadcrumb']")
-        category = ",".join([b.text.strip() for b in breadcrumbs if b.text.strip()])
-    except:
-        pass
-
-    # Small delay (important to avoid blocking)
-    time.sleep(random.uniform(1, 2))
-
-    # Close tab
-    driver.close()
-    driver.switch_to.window(driver.window_handles[0])
+    finally:
+        if len(driver.window_handles) > 1:
+            driver.close()
+            driver.switch_to.window(driver.window_handles[0])
 
     return {
         "details_text": details_text,
@@ -132,39 +163,27 @@ def get_product_extra_info(driver, wait, link):
 
 
 def normalize_product(product):
-
-    # ---------- URL ----------
+    """Normalize Noon product URL, price, seller score, and text fields."""
     if product.get("link"):
-        url = product["link"]
-        url = url.split("?")[0]
-        url = url.split("#")[0]
-        product["link"] = url.strip()
+        product["link"] = str(product["link"]).split("?")[0].split("#")[0].strip()
 
-    # ---------- Price ----------
     if product.get("price"):
-        price_text = product["price"]
-
-        # Remove currency and commas
-        price_text = re.sub(r"[^\d.]", "", price_text)
-
+        price_text = re.sub(r"[^\d.]", "", str(product["price"]))
         try:
             product["price"] = float(price_text)
-        except:
+        except Exception:
             product["price"] = None
 
-    # ---------- Seller score (convert to 0–1 scale) ----------
     if product.get("seller_score"):
-        score_text = product["seller_score"]
-
+        score_text = str(product["seller_score"])
         match = re.search(r"\d+(\.\d+)?", score_text)
         if match:
             product["seller_score"] = float(match.group()) / 5
         else:
             product["seller_score"] = None
 
-    # ---------- Clean text fields ----------
     for field in ["title", "details_text", "category"]:
         if product.get(field):
-            product[field] = " ".join(product[field].split())
+            product[field] = " ".join(str(product[field]).split())
 
     return product

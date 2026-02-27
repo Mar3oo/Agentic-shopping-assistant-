@@ -1,10 +1,10 @@
-"""Record ingestion pipeline for validating, normalizing, and storing products in MongoDB."""
+"""Record ingestion pipeline responsible for validating and upserting product records into MongoDB."""
 
 from datetime import datetime
 import re
 from typing import Any, Dict, List
 
-from pymongo.errors import DuplicateKeyError, PyMongoError
+from pymongo.errors import PyMongoError
 
 from .db import get_collection
 
@@ -15,7 +15,7 @@ def _is_blank(value: Any) -> bool:
 
 
 def _to_datetime(value: Any) -> datetime | None:
-    """Convert an ISO datetime string (or datetime) into a datetime object."""
+    """Convert a datetime value (or ISO datetime string) into a datetime object."""
     if isinstance(value, datetime):
         return value
 
@@ -23,6 +23,7 @@ def _to_datetime(value: Any) -> datetime | None:
         raw = value.strip()
         if not raw:
             return None
+
         if raw.endswith("Z"):
             raw = raw[:-1] + "+00:00"
 
@@ -67,7 +68,7 @@ def _trim_text(value: Any, max_length: int = 1000) -> str | None:
 
 
 def _validate_and_prepare(record: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate required fields and normalize the record for storage."""
+    """Validate mandatory fields and normalize a record before MongoDB upsert."""
     if not isinstance(record, dict):
         raise ValueError("Record must be a dictionary.")
 
@@ -79,7 +80,8 @@ def _validate_and_prepare(record: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(product, dict):
         raise ValueError("product must be a dictionary.")
 
-    if _is_blank(metadata.get("source")):
+    source = metadata.get("source")
+    if _is_blank(source):
         raise ValueError("metadata.source is required.")
 
     scraped_at = _to_datetime(metadata.get("scraped_at"))
@@ -98,46 +100,82 @@ def _validate_and_prepare(record: Dict[str, Any]) -> Dict[str, Any]:
     if _is_blank(link):
         raise ValueError("product.link is required.")
 
-    normalized = {
-        "metadata": dict(metadata),
-        "product": dict(product),
-    }
-
-    normalized["metadata"]["source"] = str(metadata["source"]).strip()
-    normalized["metadata"]["scraped_at"] = scraped_at
-
-    normalized["product"]["title"] = str(title).strip()
-    normalized["product"]["price"] = price
-
     normalized_link = str(link).strip().split("?")[0].split("#")[0]
     if not normalized_link:
         raise ValueError("product.link is empty after normalization.")
-    normalized["product"]["link"] = normalized_link
 
-    details_text = product.get("details_text")
-    if details_text is not None:
-        normalized["product"]["details_text"] = _trim_text(details_text, max_length=1000)
+    details_text = _trim_text(product.get("details_text"), max_length=1000)
+    seller_score = _to_float(product.get("seller_score"))
 
-    return normalized
+    category = product.get("category")
+    if _is_blank(category):
+        category = None
+    else:
+        category = str(category).strip()
+
+    return {
+        "metadata": {
+            "source": str(source).strip(),
+            "scraped_at": scraped_at,
+            "search_query": metadata.get("search_query"),
+            "page_number": metadata.get("page_number"),
+        },
+        "product": {
+            "title": str(title).strip(),
+            "price": price,
+            "link": normalized_link,
+            "details_text": details_text,
+            "seller_score": seller_score,
+            "category": category,
+        },
+    }
+
+
+def _upsert_record(prepared: Dict[str, Any]) -> str:
+    """Upsert one normalized record and return inserted or updated."""
+    collection = get_collection()
+    link = prepared["product"]["link"]
+
+    update_doc = {
+        "$set": {
+            "metadata.source": prepared["metadata"]["source"],
+            "metadata.search_query": prepared["metadata"].get("search_query"),
+            "metadata.page_number": prepared["metadata"].get("page_number"),
+            "metadata.scraped_at": prepared["metadata"]["scraped_at"],
+            "product.title": prepared["product"]["title"],
+            "product.price": prepared["product"]["price"],
+            "product.details_text": prepared["product"].get("details_text"),
+            "product.seller_score": prepared["product"].get("seller_score"),
+            "product.category": prepared["product"].get("category"),
+        },
+        "$setOnInsert": {
+            "product.link": link,
+        },
+    }
+
+    result = collection.update_one({"product.link": link}, update_doc, upsert=True)
+
+    if result.upserted_id is not None:
+        return "inserted"
+
+    return "updated"
 
 
 def ingest_records(records: List[Dict[str, Any]]) -> Dict[str, int]:
-    """Insert validated records into MongoDB and report inserted/skipped/failed counts."""
-    summary = {"inserted": 0, "skipped": 0, "failed": 0}
-
+    """Upsert records into MongoDB and return inserted/updated/failed summary."""
     if not isinstance(records, list):
         raise TypeError("records must be a list of dictionaries.")
 
-    collection = get_collection()
+    summary = {"inserted": 0, "updated": 0, "failed": 0, "error_samples": []}
 
     for record in records:
         try:
             prepared = _validate_and_prepare(record)
-            collection.insert_one(prepared)
-            summary["inserted"] += 1
-        except DuplicateKeyError:
-            summary["skipped"] += 1
-        except (ValueError, TypeError, PyMongoError):
+            status = _upsert_record(prepared)
+            summary[status] += 1
+        except (ValueError, TypeError, PyMongoError) as exc:
             summary["failed"] += 1
+            if len(summary["error_samples"]) < 3:
+                summary["error_samples"].append(str(exc))
 
     return summary

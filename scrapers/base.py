@@ -1,9 +1,12 @@
-"""Shared scraper utilities for browser setup and metadata/product record construction."""
+"""Shared scraper utilities for browser setup, retry-safe page loading, and record construction."""
 
 from datetime import datetime, timezone
 import os
+import random
+import time
 
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -84,3 +87,30 @@ def build_records(products, source, search_query, page_number, normalize_fn):
         records.append({"metadata": metadata, "product": normalized_product})
 
     return records
+
+
+def load_url_with_retry(
+    driver,
+    wait,
+    url,
+    wait_condition,
+    max_attempts=3,
+    min_delay=2.0,
+    max_delay=4.0,
+):
+    """Load a URL with retry on transient Selenium timeout/webdriver failures."""
+    last_error = None
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            driver.get(url)
+            wait_condition(wait)
+            return
+        except (TimeoutException, WebDriverException) as exc:
+            last_error = exc
+            if attempt >= max_attempts:
+                break
+            time.sleep(random.uniform(min_delay, max_delay))
+
+    if last_error is not None:
+        raise last_error
