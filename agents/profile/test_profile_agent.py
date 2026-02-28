@@ -1,5 +1,5 @@
 from agents.profile.agent import run_profile_agent
-from Data_Base.profile_repo import get_profile, save_profile
+from Data_base.profile_repo import get_profile, save_profile
 from agents.profile.schemas import UserProfile
 
 
