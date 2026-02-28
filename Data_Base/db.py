@@ -10,6 +10,7 @@ from .config import COLLECTION_NAME, DB_NAME, get_mongo_uri
 
 _CLIENT: Optional[MongoClient] = None
 _COLLECTION: Optional[Collection] = None
+_PROFILE_COLLECTION: Optional[Collection] = None
 _INDEX_READY = False
 
 
@@ -63,3 +64,16 @@ def close_client() -> None:
     _CLIENT = None
     _COLLECTION = None
     _INDEX_READY = False
+
+
+def get_profile_collection() -> Collection:
+    """Return the user profiles collection."""
+    global _CLIENT, _PROFILE_COLLECTION
+
+    if _CLIENT is None:
+        _CLIENT = _create_client()
+
+    if _PROFILE_COLLECTION is None:
+        _PROFILE_COLLECTION = _CLIENT[DB_NAME]["user_profiles"]
+
+    return _PROFILE_COLLECTION
