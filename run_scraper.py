@@ -1,4 +1,4 @@
-"""Automated runner that scrapes configured sites/queries 
+"""Automated runner that scrapes configured sites/queries
 and upserts normalized records to MongoDB."""
 
 import random
@@ -13,7 +13,17 @@ from Data_base.ingestion import ingest_records
 from scrapers import amazon, jumia, noon
 from scrapers.base import build_records, create_brave_driver
 
-SEARCH_QUERIES = []
+# Add this import to check for existing products before enrichment
+from Data_base.db import product_exists
+
+
+SKIP_EXISTING_PRODUCTS = True  # Toggle this when you want
+
+SEARCH_QUERIES = [
+    "laptops for gaming",
+    # "wireless headphones",
+    # "smartphones under 3000 EGP",
+]
 
 
 def _prepare_jumia(driver, wait):
@@ -41,7 +51,7 @@ def _prepare_amazon(driver, _wait):
 SITE_PIPELINE = [
     ("amazon", amazon, _prepare_amazon),
     ("noon", noon, _prepare_noon),
-    ("jumia", jumia, _prepare_jumia)
+    ("jumia", jumia, _prepare_jumia),
 ]
 
 
@@ -71,6 +81,17 @@ def _enrich_products(driver, wait, scraper_module, products):
         if not link:
             continue
 
+        # Normalize link before checking DB
+        normalized_product = scraper_module.normalize_product(product.copy())
+        normalized_link = normalized_product.get("link")
+
+        if (
+            SKIP_EXISTING_PRODUCTS
+            and normalized_link
+            and product_exists(normalized_link)
+        ):
+            continue
+
         try:
             extra_info = scraper_module.get_product_extra_info(driver, wait, link)
             product.update(extra_info)
@@ -97,7 +118,7 @@ def _run_query(driver, wait, site_name, scraper_module, query):
 def run_site(site_name, scraper_module, prepare_fn):
     """Run all configured queries for one site using one headless browser session."""
     totals = {"inserted": 0, "updated": 0, "failed": 0}
-    driver = create_brave_driver(incognito=True, headless=True)
+    driver = create_brave_driver(incognito=True, headless=False)
     wait = WebDriverWait(driver, 10)
 
     try:
@@ -109,7 +130,9 @@ def run_site(site_name, scraper_module, prepare_fn):
                 summary = _run_query(driver, wait, site_name, scraper_module, query)
             except Exception as exc:
                 summary["failed"] += 1
-                print(f"Query processing failed for site={site_name}, query='{query}': {exc}")
+                print(
+                    f"Query processing failed for site={site_name}, query='{query}': {exc}"
+                )
 
             _print_query_summary(site_name, query, summary)
 

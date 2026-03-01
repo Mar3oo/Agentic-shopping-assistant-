@@ -77,3 +77,8 @@ def get_profile_collection() -> Collection:
         _PROFILE_COLLECTION = _CLIENT[DB_NAME]["user_profiles"]
 
     return _PROFILE_COLLECTION
+
+
+def product_exists(link):
+    collection = get_collection()
+    return collection.find_one({"product.link": link}, {"_id": 1}) is not None

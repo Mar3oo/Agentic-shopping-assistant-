@@ -55,16 +55,22 @@ def _has_next_page(driver, current_page):
                 return True
 
     next_page = current_page + 1
-    return bool(driver.find_elements(By.XPATH, f"//a[contains(@href, 'page={next_page}')]"))
+    return bool(
+        driver.find_elements(By.XPATH, f"//a[contains(@href, 'page={next_page}')]")
+    )
 
 
 def get_all_products(driver, wait, query):
     """Scrape all available result pages for a query using automatic pagination."""
     all_products = []
-    query_encoded = quote_plus(query)
+
+    # Jumia works better with simple keywords
+    main_keyword = query.split()[0]
+    query_encoded = quote_plus(main_keyword)
+
     page_num = 1
 
-    while True:
+    while page_num <= 1:
         url = f"https://www.jumia.com.eg/catalog/?q={query_encoded}&page={page_num}"
         print(f"Scraping page {page_num}")
         print("URL:", url)
@@ -75,12 +81,18 @@ def get_all_products(driver, wait, query):
                 wait,
                 url,
                 lambda w: w.until(
-                    EC.visibility_of_element_located((By.CSS_SELECTOR, "article.prd"))
+                    EC.presence_of_all_elements_located(
+                        (By.CSS_SELECTOR, "article.prd")
+                    )
                 ),
                 max_attempts=3,
             )
         except (TimeoutException, WebDriverException):
             break
+
+        # Scroll to trigger lazy loading
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(2)
 
         products = get_products(driver)
         print("Products found:", len(products))
@@ -120,7 +132,9 @@ def get_product_extra_info(driver, wait, link):
         )
 
         try:
-            details_container = driver.find_element(By.CSS_SELECTOR, "div.markup.-mhm.-pvl.-oxa.-sc")
+            details_container = driver.find_element(
+                By.CSS_SELECTOR, "div.markup.-mhm.-pvl.-oxa.-sc"
+            )
             details_text = details_container.text
         except Exception:
             pass

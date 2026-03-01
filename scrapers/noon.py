@@ -15,11 +15,15 @@ from .base import load_url_with_retry
 def get_products_noon(driver):
     """Extract product title, price, and link from the current Noon results page."""
     products = []
-    product_cards = driver.find_elements(By.CSS_SELECTOR, "div[data-qa='plp-product-box']")
+    product_cards = driver.find_elements(
+        By.CSS_SELECTOR, "div[data-qa='plp-product-box']"
+    )
 
     for item in product_cards:
         try:
-            title = item.find_element(By.CSS_SELECTOR, "h2[data-qa='plp-product-box-name']").text
+            title = item.find_element(
+                By.CSS_SELECTOR, "h2[data-qa='plp-product-box-name']"
+            ).text
         except Exception:
             title = None
 
@@ -29,7 +33,9 @@ def get_products_noon(driver):
             price = None
 
         try:
-            link = item.find_element(By.CSS_SELECTOR, "a[href*='/p/']").get_attribute("href")
+            link = item.find_element(By.CSS_SELECTOR, "a[href*='/p/']").get_attribute(
+                "href"
+            )
         except Exception:
             link = None
 
@@ -55,7 +61,9 @@ def _has_next_page(driver, current_page):
                 return True
 
     next_page = current_page + 1
-    return bool(driver.find_elements(By.XPATH, f"//a[contains(@href, 'page={next_page}')]"))
+    return bool(
+        driver.find_elements(By.XPATH, f"//a[contains(@href, 'page={next_page}')]")
+    )
 
 
 def get_all_products(driver, wait, query):
@@ -64,7 +72,7 @@ def get_all_products(driver, wait, query):
     query_encoded = quote_plus(query)
     page_num = 1
 
-    while True:
+    while page_num <= 1:
         url = f"https://www.noon.com/egypt-en/search?q={query_encoded}&page={page_num}"
         print(f"Scraping page {page_num}")
         print("URL:", url)
@@ -142,7 +150,9 @@ def get_product_extra_info(driver, wait, link):
             pass
 
         try:
-            breadcrumbs = driver.find_elements(By.CSS_SELECTOR, "a[class*='breadcrumb']")
+            breadcrumbs = driver.find_elements(
+                By.CSS_SELECTOR, "a[class*='breadcrumb']"
+            )
             category = ",".join([b.text.strip() for b in breadcrumbs if b.text.strip()])
         except Exception:
             pass

@@ -31,7 +31,9 @@ def get_products(driver):
 
         try:
             price_whole = item.find_element(By.CSS_SELECTOR, "span.a-price-whole").text
-            price_fraction = item.find_element(By.CSS_SELECTOR, "span.a-price-fraction").text
+            price_fraction = item.find_element(
+                By.CSS_SELECTOR, "span.a-price-fraction"
+            ).text
             price = f"{price_whole}.{price_fraction}"
         except Exception:
             price = None
@@ -62,7 +64,9 @@ def _has_next_page(driver, current_page):
         pass
 
     next_page = current_page + 1
-    return bool(driver.find_elements(By.XPATH, f"//a[contains(@href, 'page={next_page}')]"))
+    return bool(
+        driver.find_elements(By.XPATH, f"//a[contains(@href, 'page={next_page}')]")
+    )
 
 
 def get_all_products(driver, wait, query):
@@ -71,7 +75,7 @@ def get_all_products(driver, wait, query):
     query_encoded = quote_plus(query)
     page_num = 1
 
-    while True:
+    while page_num <= 1:
         url = f"https://www.amazon.eg/s?k={query_encoded}&page={page_num}"
         print(f"Scraping page {page_num}")
         print("URL:", url)
@@ -83,7 +87,10 @@ def get_all_products(driver, wait, query):
                 url,
                 lambda w: w.until(
                     EC.presence_of_element_located(
-                        (By.XPATH, '//div[contains(@class,"s-result-item") and @data-asin]')
+                        (
+                            By.XPATH,
+                            '//div[contains(@class,"s-result-item") and @data-asin]',
+                        )
                     )
                 ),
                 max_attempts=3,
@@ -129,7 +136,9 @@ def get_product_extra_info(driver, wait, link):
         )
 
         try:
-            details_text = driver.find_element(By.CSS_SELECTOR, "#productDescription").text
+            details_text = driver.find_element(
+                By.CSS_SELECTOR, "#productDescription"
+            ).text
         except Exception:
             pass
 
