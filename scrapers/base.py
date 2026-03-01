@@ -36,6 +36,9 @@ def create_brave_driver(
 
     if headless:
         chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option("useAutomationExtension", False)
 
     if disable_extensions:
         chrome_options.add_argument("--disable-extensions")
@@ -65,7 +68,15 @@ def create_brave_driver(
             driver_path = exe_path
 
     service = Service(driver_path)
-    return webdriver.Chrome(service=service, options=chrome_options)
+
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+
+    # Hide webdriver flag
+    driver.execute_script(
+        "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+    )
+
+    return driver
 
 
 def create_metadata(source, search_query, page_number):

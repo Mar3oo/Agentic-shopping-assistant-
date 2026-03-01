@@ -83,7 +83,7 @@ def get_all_products(driver, wait, query):
                 wait,
                 url,
                 lambda w: w.until(
-                    EC.visibility_of_element_located(
+                    EC.presence_of_all_elements_located(
                         (By.CSS_SELECTOR, "div[data-qa='plp-product-box']")
                     )
                 ),

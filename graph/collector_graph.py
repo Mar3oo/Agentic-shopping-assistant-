@@ -1,0 +1,102 @@
+from typing import TypedDict, List
+from langgraph.graph import StateGraph, END
+
+from Data_base import db
+from scrapers.run_scraper import run_all_sites
+from Data_base.profile_repo import get_profile
+
+
+# -------------------------
+# 1) Define State
+# -------------------------
+
+
+class CollectorState(TypedDict):
+    user_id: str
+    queries: List[str]
+
+
+# -------------------------
+# 2) Define Nodes
+# -------------------------
+
+
+def load_profile_node(state: CollectorState):
+    """
+    Load profile from DB using user_id
+    """
+    user_id = state["user_id"]
+
+    print("Loading profile for:", user_id)
+
+    profile = get_profile(user_id)
+
+    if not profile:
+        raise ValueError("Profile not found.")
+
+    queries = profile.get("search_queries", [])
+
+    print("Extracted queries:", queries)
+
+    state["queries"] = queries
+
+    return state
+
+
+# this is replaced by same one has collector status inside
+# def run_scraper_node(state: CollectorState):
+#     """
+#     This node runs the scraping pipeline
+#     """
+#     queries = state["queries"]
+
+#     print("Running collector with queries:", queries)
+
+#     run_all_sites(queries)
+
+#     return state
+
+
+def run_scraper_node(state: CollectorState):
+    user_id = state["user_id"]
+    queries = state["queries"]
+
+    print("Running collector with queries:", queries)
+
+    # Set status = running
+    db.user_profiles.update_one(
+        {"user_id": user_id}, {"$set": {"collection_status": "running"}}
+    )
+
+    run_all_sites(queries)
+
+    # Set status = done
+    db.user_profiles.update_one(
+        {"user_id": user_id}, {"$set": {"collection_status": "done"}}
+    )
+
+    return state
+
+
+# -------------------------
+# 3) Build Graph
+# -------------------------
+
+
+def build_collector_graph():
+
+    builder = StateGraph(CollectorState)
+
+    builder.add_node("load_profile", load_profile_node)
+    builder.add_node("run_scraper", run_scraper_node)
+
+    builder.set_entry_point("load_profile")
+
+    builder.add_edge("load_profile", "run_scraper")
+    builder.add_edge("run_scraper", END)
+
+    return builder.compile()
+
+
+# Create compiled graph instance
+collector_graph = build_collector_graph()
