@@ -19,11 +19,14 @@ from Data_base.db import product_exists
 
 SKIP_EXISTING_PRODUCTS = True  # Toggle this when you want
 
-SEARCH_QUERIES = [
-    "laptops for gaming",
-    # "wireless headphones",
-    # "smartphones under 3000 EGP",
-]
+# SEARCH_QUERIES = [
+#     "laptops for gaming",
+#     # "wireless headphones",
+#     # "smartphones under 3000 EGP",
+# ]
+
+# Queries will be passed dynamically
+SEARCH_QUERIES = None
 
 
 def _prepare_jumia(driver, wait):
@@ -118,7 +121,13 @@ def _run_query(driver, wait, site_name, scraper_module, query):
 def run_site(site_name, scraper_module, prepare_fn):
     """Run all configured queries for one site using one headless browser session."""
     totals = {"inserted": 0, "updated": 0, "failed": 0}
-    driver = create_brave_driver(incognito=True, headless=False)
+
+    if site_name == "noon":
+        headless_mode = False  # Set to False for Noon to avoid anti-scraping issues
+    else:
+        headless_mode = True
+
+    driver = create_brave_driver(incognito=True, headless=headless_mode)
     wait = WebDriverWait(driver, 10)
 
     try:
@@ -148,13 +157,23 @@ def run_site(site_name, scraper_module, prepare_fn):
     return totals
 
 
-def run_all_sites():
-    """Execute the automated site order: Amazon -> Noon -> Jumia."""
+def run_all_sites(queries=None):
+    """
+    Execute the automated site order: Amazon -> Noon -> Jumia
+    queries: list of search queries from profile agent
+    """
+    global SEARCH_QUERIES
+    SEARCH_QUERIES = queries
+
+    if not SEARCH_QUERIES:
+        print("No search queries provided.")
+        return
+
     try:
         for site_name, scraper_module, prepare_fn in SITE_PIPELINE:
             run_site(site_name, scraper_module, prepare_fn)
     finally:
-        close_client()
+        pass  # close_client() that was here before threaded execution
 
 
 if __name__ == "__main__":

@@ -1,10 +1,12 @@
+from Data_base import db
 from agents.profile.agent import run_profile_agent
 from Data_base.profile_repo import get_profile, save_profile
 from agents.profile.schemas import UserProfile
+from graph.collector_graph import collector_graph
 
 
 def chat_with_profile_agent():
-    user_id = "user_001"
+    user_id = "user_005"
     history = []
 
     # Load existing profile
@@ -58,6 +60,34 @@ def chat_with_profile_agent():
             print("\nSearch Queries:")
             for q in current_profile.search_queries:
                 print("-", q)
+
+            # ==============================
+            # STEP 4: Trigger Collector
+            # ==============================
+            if output.is_complete:
+                # ------------------------------
+                # Step 8: Safety checks
+                # ------------------------------
+
+                # 1) Check collection status
+                profile_doc = db.user_profiles.find_one({"user_id": user_id})
+                status = (
+                    profile_doc.get("collection_status", "idle")
+                    if profile_doc
+                    else "idle"
+                )
+
+                if status == "running":
+                    print("\nCollector is already running for this user.")
+
+                else:
+                    state = {"user_id": user_id, "queries": []}
+
+                    print("\nStarting Collector...")
+
+                    collector_graph.invoke(state)
+
+                    print("Collector finished.")
 
             print("\nYou can type 'reset' to search for another product.")
             user_input = input("You: ")

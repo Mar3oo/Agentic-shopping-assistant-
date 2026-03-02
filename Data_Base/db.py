@@ -82,3 +82,10 @@ def get_profile_collection() -> Collection:
 def product_exists(link):
     collection = get_collection()
     return collection.find_one({"product.link": link}, {"_id": 1}) is not None
+
+
+# Expose commonly-used collections for modules that import this module directly.
+# This keeps backward compatibility with code that expects attributes like
+# `db.user_profiles` and `db.products_raw`.
+user_profiles = get_profile_collection()
+products_raw = get_collection()
