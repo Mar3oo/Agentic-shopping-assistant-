@@ -61,19 +61,26 @@ def run_scraper_node(state: CollectorState):
     user_id = state["user_id"]
     queries = state["queries"]
 
-    print("Running collector with queries:", queries)
+    try:
+        print(f"[Collector] Started for {user_id}")
 
-    # Set status = running
-    db.user_profiles.update_one(
-        {"user_id": user_id}, {"$set": {"collection_status": "running"}}
-    )
+        # status = running
+        db.user_profiles.update_one(
+            {"user_id": user_id}, {"$set": {"collection_status": "running"}}
+        )
 
-    run_all_sites(queries)
+        run_all_sites(queries)
 
-    # Set status = done
-    db.user_profiles.update_one(
-        {"user_id": user_id}, {"$set": {"collection_status": "done"}}
-    )
+        print(f"[Collector] Finished for {user_id}")
+
+    except Exception as e:
+        print(f"[Collector ERROR]: {e}")
+
+    finally:
+        # ALWAYS mark as done (even if error)
+        db.user_profiles.update_one(
+            {"user_id": user_id}, {"$set": {"collection_status": "done"}}
+        )
 
     return state
 

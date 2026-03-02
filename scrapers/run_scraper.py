@@ -173,7 +173,7 @@ def run_all_sites(queries=None):
         for site_name, scraper_module, prepare_fn in SITE_PIPELINE:
             run_site(site_name, scraper_module, prepare_fn)
     finally:
-        close_client()
+        pass  # close_client() that was here before threaded execution
 
 
 if __name__ == "__main__":

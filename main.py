@@ -3,7 +3,6 @@ from agents.profile.agent import run_profile_agent
 from Data_base.profile_repo import get_profile, save_profile
 from agents.profile.schemas import UserProfile
 from graph.collector_graph import collector_graph
-import threading
 
 
 def chat_with_profile_agent():
@@ -72,34 +71,23 @@ def chat_with_profile_agent():
 
                 # 1) Check collection status
                 profile_doc = db.user_profiles.find_one({"user_id": user_id})
-                status = profile_doc.get("collection_status") if profile_doc else None
+                status = (
+                    profile_doc.get("collection_status", "idle")
+                    if profile_doc
+                    else "idle"
+                )
 
                 if status == "running":
                     print("\nCollector is already running for this user.")
 
                 else:
-                    # 2) Check if products already exist
-                    existing_products = db.products_raw.count_documents(
-                        {"user_id": user_id}
-                    )
+                    state = {"user_id": user_id, "queries": []}
 
-                    if existing_products > 0:
-                        print(
-                            f"\nCollector skipped. {existing_products} products already exist for this user."
-                        )
+                    print("\nStarting Collector...")
 
-                    else:
-                        print("\nStarting Collector...")
+                    collector_graph.invoke(state)
 
-                        state = {"user_id": user_id, "queries": []}
-
-                        def run_collector():
-                            collector_graph.invoke(state)
-
-                        thread = threading.Thread(target=run_collector, daemon=True)
-                        thread.start()
-
-                        print("Collector started in background.")
+                    print("Collector finished.")
 
             print("\nYou can type 'reset' to search for another product.")
             user_input = input("You: ")
