@@ -5,6 +5,7 @@ import re
 from typing import Any, Dict, List
 
 from pymongo.errors import PyMongoError
+from agents.recommendation.embedding_model import get_embedding_model
 
 from .db import get_collection
 
@@ -67,6 +68,23 @@ def _trim_text(value: Any, max_length: int = 1000) -> str | None:
     return str(value).strip()[:max_length]
 
 
+def _classify_product_type(search_query: str) -> str:
+    q = (search_query or "").lower()
+
+    if "laptop" in q:
+        return "laptop"
+    if "keyboard" in q:
+        return "keyboard"
+    if "book" in q:
+        return "book"
+    if "phone" in q or "smartphone" in q:
+        return "phone"
+    if "headphone" in q:
+        return "headphones"
+
+    return "other"
+
+
 def _validate_and_prepare(record: Dict[str, Any]) -> Dict[str, Any]:
     """Validate mandatory fields and normalize a record before MongoDB upsert."""
     if not isinstance(record, dict):
@@ -113,6 +131,9 @@ def _validate_and_prepare(record: Dict[str, Any]) -> Dict[str, Any]:
     else:
         category = str(category).strip()
 
+    search_query = metadata.get("search_query")
+    product_type = _classify_product_type(search_query)
+
     return {
         "metadata": {
             "source": str(source).strip(),
@@ -127,14 +148,43 @@ def _validate_and_prepare(record: Dict[str, Any]) -> Dict[str, Any]:
             "details_text": details_text,
             "seller_score": seller_score,
             "category": category,
+            "product_type": product_type,
         },
     }
 
 
+def _build_product_semantic_text(prepared: Dict[str, Any]) -> str:
+    """
+    Build semantic text representation for embedding.
+    Handles missing fields safely.
+    """
+    product = prepared["product"]
+
+    parts = []
+
+    if product.get("title"):
+        parts.append(f"Title: {product['title']}")
+
+    if product.get("category"):
+        parts.append(f"Category: {product['category']}")
+
+    if product.get("details_text"):
+        parts.append(f"Details: {product['details_text']}")
+
+    return "\n".join(parts)
+
+
 def _upsert_record(prepared: Dict[str, Any]) -> str:
-    """Upsert one normalized record and return inserted or updated."""
+    """
+    Upsert one normalized record.
+    If inserted → generate embedding.
+    If updated → do not re-embed (performance optimization).
+    """
     collection = get_collection()
     link = prepared["product"]["link"]
+
+    # Check if product already exists
+    existing = collection.find_one({"product.link": link}, {"_id": 1})
 
     update_doc = {
         "$set": {
@@ -147,11 +197,22 @@ def _upsert_record(prepared: Dict[str, Any]) -> str:
             "product.details_text": prepared["product"].get("details_text"),
             "product.seller_score": prepared["product"].get("seller_score"),
             "product.category": prepared["product"].get("category"),
+            "product.product_type": prepared["product"].get("product_type"),
         },
         "$setOnInsert": {
             "product.link": link,
         },
     }
+
+    # If new product → generate embedding
+    if existing is None:
+        semantic_text = _build_product_semantic_text(prepared)
+
+        if semantic_text.strip():
+            model = get_embedding_model()
+            embedding = model.encode([semantic_text])[0].tolist()
+
+            update_doc["$set"]["product.embedding"] = embedding
 
     result = collection.update_one({"product.link": link}, update_doc, upsert=True)
 
