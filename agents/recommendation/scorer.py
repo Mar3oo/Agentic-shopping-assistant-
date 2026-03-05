@@ -5,6 +5,7 @@ Combines semantic similarity + structured signals.
 
 from typing import List, Dict, Any
 import numpy as np
+from Data_base.feedback_repo import get_user_feedback
 
 
 class ProductScorer:
@@ -93,6 +94,8 @@ class ProductScorer:
         """
 
         scored = []
+        feedback = get_user_feedback("user_005")
+        liked_links = {f["product_link"] for f in feedback if f["liked"]}
 
         for item in products:
             product = item["product"]
@@ -108,10 +111,16 @@ class ProductScorer:
 
             seller_score = self._seller_score(product.get("seller_score"))
 
+            feedback_boost = 0
+
+            if product.get("link") in liked_links:
+                feedback_boost = 0.1
+
             final_score = (
                 semantic_sim * self.semantic_weight
                 + price_score * self.price_weight
                 + seller_score * self.seller_weight
+                + feedback_boost
             )
 
             scored.append(

@@ -5,6 +5,7 @@ from agents.profile.schemas import UserProfile
 from graph.collector_graph import collector_graph
 from agents.recommendation.agent import RecommendationAgent
 from agents.recommendation.chat_handler import RecommendationChatHandler
+from Data_base.feedback_repo import save_feedback
 
 
 def chat_with_profile_agent():
@@ -46,6 +47,49 @@ def chat_with_profile_agent():
             output, raw = run_profile_agent(user_input, history, current_profile)
 
         elif mode == "recommendation":
+            # -----------------------------
+            # Review sentiment command
+            # -----------------------------
+            if user_input.lower().startswith("review"):
+                parts = user_input.lower().split()
+
+                numbers = [int(p) for p in parts if p.isdigit()]
+
+                if len(numbers) == 1:
+                    i = numbers[0]
+
+                    if 1 <= i <= len(last_recommendations):
+                        product = last_recommendations[i - 1]
+
+                        review_text = rec_handler.get_product_reviews(product)
+
+                        print("\n" + review_text)
+
+                        user_input = input("You: ")
+                        continue
+
+            # check comparison command
+            if user_input.lower().startswith("compare"):
+                parts = user_input.lower().split()
+
+                numbers = [int(p) for p in parts if p.isdigit()]
+
+                if len(numbers) == 2:
+                    i, j = numbers
+
+                    if 1 <= i <= len(last_recommendations) and 1 <= j <= len(
+                        last_recommendations
+                    ):
+                        p1 = last_recommendations[i - 1]
+                        p2 = last_recommendations[j - 1]
+
+                        comparison = rec_handler.compare_products(p1, p2)
+
+                        print("\n" + comparison)
+
+                        user_input = input("You: ")
+                        continue
+
             result = rec_handler.handle(
                 user_input, current_profile.model_dump(), last_recommendations
             )
@@ -144,6 +188,26 @@ def chat_with_profile_agent():
                     print("Title:", rec["title"])
                     print("Price:", rec["price"])
                     print("Score:", round(rec["final_score"], 4))
+
+                print("\nWhich recommendation do you prefer? (1 / 2 / 3 / none)")
+                choice = input("Choice: ").strip()
+
+                if choice in ["1", "2", "3"]:
+                    idx = int(choice) - 1
+                    selected = recommendations[idx]
+
+                    save_feedback(user_id, selected["link"], liked=True)
+
+                    print(
+                        "Feedback saved. We'll prioritize similar products next time."
+                    )
+
+                elif choice.lower() == "none":
+                    for r in recommendations:
+                        save_feedback(user_id, r["link"], liked=False)
+
+                    print("Got it. We'll avoid similar products next time.")
+
                 mode = "recommendation"
 
             print("\nYou can type 'reset' to search for another product.")

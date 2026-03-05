@@ -79,6 +79,15 @@ def get_profile_collection() -> Collection:
     return _PROFILE_COLLECTION
 
 
+def get_feedback_collection():
+    global _CLIENT
+
+    if _CLIENT is None:
+        _CLIENT = _create_client()
+
+    return _CLIENT[DB_NAME]["user_feedback"]
+
+
 def product_exists(link):
     collection = get_collection()
     return collection.find_one({"product.link": link}, {"_id": 1}) is not None

@@ -8,6 +8,7 @@ from agents.recommendation.embedding_model import get_embedding_model
 from agents.recommendation.retriever import ProductRetriever
 from agents.recommendation.scorer import ProductScorer
 from agents.recommendation.bm25_index import BM25Index
+from agents.recommendation.llm_reranker import LLMReranker
 
 
 def detect_product_type(profile: Dict[str, Any]) -> str:
@@ -45,6 +46,7 @@ class RecommendationAgent:
         self.retriever = ProductRetriever()
         self.scorer = ProductScorer()
         self.bm25 = BM25Index()
+        self.reranker = LLMReranker()
 
     def _build_user_semantic_text(self, profile: Dict[str, Any]) -> str:
         """
@@ -126,7 +128,12 @@ class RecommendationAgent:
             user_embedding,
             user_price_min=profile.get("budget_min"),
             user_price_max=profile.get("budget_max"),
-            top_k=top_k,
+            top_k=10,
         )
 
-        return ranked
+        # 5️⃣ Rerank with LLM
+        query_text = " ".join(profile.get("search_queries", []))
+
+        final = self.reranker.rerank(query_text, ranked, top_k=3)
+
+        return final

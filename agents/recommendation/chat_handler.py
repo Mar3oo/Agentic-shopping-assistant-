@@ -11,6 +11,9 @@ from groq import Groq
 from agents.recommendation.intent_router import RecommendationIntentRouter
 from agents.recommendation.agent import RecommendationAgent
 
+from agents.reviews.youtube_service import search_youtube, get_transcripts_for_videos
+from agents.reviews.sentiment_analyzer import analyze_reviews
+
 load_dotenv()
 
 
@@ -100,6 +103,23 @@ class RecommendationChatHandler:
         if intent == "new_search":
             return {"type": "new_search", "data": None}
 
+        # -----------------------------
+        # 6️⃣ Review sentiment analysis
+        # -----------------------------
+
+        if intent == "review_sentiment":
+            product = current_recommendations[0]
+
+            videos = search_youtube(product["title"] + " review")
+
+            video_ids = [v["video_id"] for v in videos]
+
+            transcripts = get_transcripts_for_videos(video_ids)
+
+            sentiment = analyze_reviews(product["title"], transcripts)
+
+            return {"type": "message", "data": sentiment}
+
         # Fallback
         return {
             "type": "message",
@@ -156,6 +176,71 @@ Answer clearly using product context.
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.5,
+        )
+
+        return response.choices[0].message.content.strip()
+
+    def get_product_reviews(self, product):
+
+        product_name = product.get("title")
+
+        videos = search_youtube(product_name + " review")
+
+        if not videos:
+            return "No review videos found."
+
+        video_ids = [v["video_id"] for v in videos]
+
+        transcripts = get_transcripts_for_videos(video_ids)
+
+        if not transcripts:
+            return "No transcripts available for analysis."
+
+        sentiment = analyze_reviews(product_name, transcripts)
+
+        video_links = "\n".join([f"- {v['title']} ({v['link']})" for v in videos[:3]])
+
+        return f"""
+    YouTube Community Review Analysis
+
+    Product: {product_name}
+
+    {sentiment}
+
+    Top review videos:
+    {video_links}
+    """
+
+    def compare_products(self, p1, p2):
+
+        prompt = f"""
+    Compare these two products and help the user decide.
+
+    Product 1:
+    Title: {p1.get("title")}
+    Price: {p1.get("price")}
+    Details: {p1.get("details_text")}
+
+    Product 2:
+    Title: {p2.get("title")}
+    Price: {p2.get("price")}
+    Details: {p2.get("details_text")}
+
+    Explain:
+
+    1. Performance
+    2. Build quality
+    3. Battery life (if relevant)
+    4. Value for money
+    5. Which user each product is better for
+
+    Give a clear final recommendation.
+    """
+
+        response = self.llm.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.4,
         )
 
         return response.choices[0].message.content.strip()
