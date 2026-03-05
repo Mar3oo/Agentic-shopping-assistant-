@@ -8,7 +8,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-from Data_base.db import close_client
+# from Data_base.db import close_client
 from Data_base.ingestion import ingest_records
 from scrapers import amazon, jumia, noon
 from scrapers.base import build_records, create_brave_driver
@@ -133,7 +133,8 @@ def run_site(site_name, scraper_module, prepare_fn):
     try:
         prepare_fn(driver, wait)
 
-        for query in SEARCH_QUERIES:
+        # Limit to first query for testing; remove slicing for full run
+        for query in SEARCH_QUERIES[:1]:
             summary = {"inserted": 0, "updated": 0, "failed": 0}
             try:
                 summary = _run_query(driver, wait, site_name, scraper_module, query)
