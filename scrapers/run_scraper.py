@@ -22,14 +22,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 SKIP_EXISTING_PRODUCTS = True  # Toggle this when you want
 
-SEARCH_QUERIES = [
-    # "laptops for gaming",
-    "wireless headphones",
-    # "smartphones under 3000 EGP",
-]
+# SEARCH_QUERIES = [
+#     # "laptops for gaming",
+#     "wireless headphones",
+#     # "smartphones under 3000 EGP",
+# ]
 
-# # Queries will be passed dynamically
-# SEARCH_QUERIES = None
+# Queries will be passed dynamically
+SEARCH_QUERIES = None
 
 
 def _prepare_jumia(driver, wait):
@@ -216,7 +216,7 @@ def run_site(site_name, scraper_module, prepare_fn):
     return totals
 
 
-def run_all_sites(queries=SEARCH_QUERIES):
+def run_all_sites(queries=None):
     """
     Execute the automated site order: Amazon -> Noon -> Jumia
     queries: list of search queries from profile agent
