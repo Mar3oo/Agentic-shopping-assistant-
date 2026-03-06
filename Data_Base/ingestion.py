@@ -8,6 +8,7 @@ from pymongo.errors import PyMongoError
 from agents.recommendation.embedding_model import get_embedding_model
 
 from .db import get_collection
+from tools.product_classifier import classify_product_type
 
 
 def _is_blank(value: Any) -> bool:
@@ -68,23 +69,6 @@ def _trim_text(value: Any, max_length: int = 1000) -> str | None:
     return str(value).strip()[:max_length]
 
 
-def _classify_product_type(search_query: str) -> str:
-    q = (search_query or "").lower()
-
-    if "laptop" in q:
-        return "laptop"
-    if "keyboard" in q:
-        return "keyboard"
-    if "book" in q:
-        return "book"
-    if "phone" in q or "smartphone" in q:
-        return "phone"
-    if "headphone" in q:
-        return "headphones"
-
-    return "other"
-
-
 def _validate_and_prepare(record: Dict[str, Any]) -> Dict[str, Any]:
     """Validate mandatory fields and normalize a record before MongoDB upsert."""
     if not isinstance(record, dict):
@@ -132,7 +116,7 @@ def _validate_and_prepare(record: Dict[str, Any]) -> Dict[str, Any]:
         category = str(category).strip()
 
     search_query = metadata.get("search_query")
-    product_type = _classify_product_type(search_query)
+    product_type = classify_product_type(search_query)
 
     return {
         "metadata": {

@@ -9,31 +9,7 @@ from agents.recommendation.retriever import ProductRetriever
 from agents.recommendation.scorer import ProductScorer
 from agents.recommendation.bm25_index import BM25Index
 from agents.recommendation.llm_reranker import LLMReranker
-
-
-def detect_product_type(profile: Dict[str, Any]) -> str:
-    """
-    Detect product type from user search queries.
-    """
-
-    text = " ".join(profile.get("search_queries", [])).lower()
-
-    if "laptop" in text:
-        return "laptop"
-
-    if "keyboard" in text:
-        return "keyboard"
-
-    if "book" in text:
-        return "book"
-
-    if "phone" in text:
-        return "phone"
-
-    if "headphone" in text:
-        return "headphones"
-
-    return "other"
+from tools.product_classifier import classify_product_type
 
 
 class RecommendationAgent:
@@ -94,7 +70,7 @@ class RecommendationAgent:
         # 2️⃣ Generate user embedding
         user_embedding = self.model.encode([user_text])[0]
 
-        product_type = detect_product_type(profile)
+        product_type = classify_product_type(profile)
 
         # 3️⃣ Retrieve candidate products
         query_text = " ".join(profile.get("search_queries", []))
@@ -108,6 +84,7 @@ class RecommendationAgent:
             product_type=product_type,
             price_min=profile.get("budget_min"),
             price_max=profile.get("budget_max"),
+            user_embedding=user_embedding,
         )
 
         # merge both candidate lists

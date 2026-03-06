@@ -6,6 +6,7 @@ Hybrid retriever:
 
 from typing import List, Dict, Any, Optional
 from Data_base.db import get_collection
+from agents.recommendation.vector_index import ProductVectorIndex
 
 
 class ProductRetriever:
@@ -16,25 +17,22 @@ class ProductRetriever:
 
     def __init__(self):
         self.collection = get_collection()
+        self.vector_index = ProductVectorIndex()
 
     def retrieve_candidates(
         self,
         product_type: Optional[str] = None,
         price_min: Optional[float] = None,
         price_max: Optional[float] = None,
+        user_embedding=None,
         limit: int = 300,
     ) -> List[Dict[str, Any]]:
-        """
-        Retrieve candidate products using product_type + price filtering.
-        """
 
         query = {"product.embedding": {"$exists": True}}
 
-        # Filter by product type
         if product_type:
             query["product.product_type"] = product_type
 
-        # Price filtering
         if price_min is not None or price_max is not None:
             query["product.price"] = {}
 
@@ -55,6 +53,17 @@ class ProductRetriever:
             "product.embedding": 1,
             "product.product_type": 1,
         }
+
+        # ---------------------------
+        # FAISS vector search
+        # ---------------------------
+        if user_embedding is not None:
+            self.vector_index.build(product_type)
+
+            links = self.vector_index.search(user_embedding, top_k=100)
+
+            if links:
+                query["product.link"] = {"$in": links}
 
         cursor = self.collection.find(query, projection).limit(limit)
 
