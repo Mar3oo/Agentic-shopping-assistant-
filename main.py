@@ -6,6 +6,8 @@ from graph.collector_graph import collector_graph
 from agents.recommendation.agent import RecommendationAgent
 from agents.recommendation.chat_handler import RecommendationChatHandler
 from Data_base.feedback_repo import save_feedback
+from Data_base.product_cache import has_enough_products
+from agents.recommendation.agent import detect_product_type
 
 
 def chat_with_profile_agent():
@@ -15,15 +17,10 @@ def chat_with_profile_agent():
     rec_handler = RecommendationChatHandler()
     last_recommendations = []
 
-    # Load existing profile
-    stored_profile = get_profile(user_id)
+    # reset profile every run
+    db.user_profiles.delete_one({"user_id": user_id})
 
-    if stored_profile:
-        current_profile = UserProfile(**stored_profile)
-        print("Loaded existing profile from database.")
-    else:
-        current_profile = None
-        print("No existing profile found. Starting new session.")
+    current_profile = None
 
     print("\nProfile Agent Started.")
     print("Type 'exit' to stop.")
@@ -145,27 +142,46 @@ def chat_with_profile_agent():
                 print("-", q)
 
             # ==============================
-            # STEP 4: Trigger Collector
+            # STEP 4: Trigger Collector (SMART CACHE VERSION)
             # ==============================
 
-            # 1) Check collection status
-            profile_doc = db.user_profiles.find_one({"user_id": user_id})
-            status = (
-                profile_doc.get("collection_status", "idle") if profile_doc else "idle"
+            profile_dict = current_profile.model_dump()
+
+            # detect product type
+            product_type = detect_product_type(profile_dict)
+
+            price_min = profile_dict.get("budget_min")
+            price_max = profile_dict.get("budget_max")
+
+            # check cache
+            cache_ok = has_enough_products(
+                product_type=product_type,
+                price_min=price_min,
+                price_max=price_max,
             )
 
-            if status == "running":
-                print("\nCollector is already running for this user.")
+            if cache_ok:
+                print("\nUsing cached products from database. Skipping scraping.")
 
             else:
-                state = {"user_id": user_id, "queries": []}
+                profile_doc = db.user_profiles.find_one({"user_id": user_id})
+                status = (
+                    profile_doc.get("collection_status", "idle")
+                    if profile_doc
+                    else "idle"
+                )
 
-                print("\nStarting Collector...")
+                if status == "running":
+                    print("\nCollector is already running for this user.")
 
-                collector_graph.invoke(state)
+                else:
+                    state = {"user_id": user_id, "queries": []}
 
-                print("Collector finished.")
+                    print("\nStarting Collector...")
 
+                    collector_graph.invoke(state)
+
+                    print("Collector finished.")
             # ==============================
             # STEP 6: Run Recommendation Agent
             # ==============================

@@ -14,14 +14,17 @@ from scrapers import amazon, jumia, noon
 from scrapers.base import build_records, create_brave_driver
 
 # Add this import to check for existing products before enrichment
-from Data_base.db import product_exists
+from Data_base.db import get_collection
 
+
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 SKIP_EXISTING_PRODUCTS = True  # Toggle this when you want
 
 # SEARCH_QUERIES = [
-#     "laptops for gaming",
-#     # "wireless headphones",
+#     # "laptops for gaming",
+#     "wireless headphones",
 #     # "smartphones under 3000 EGP",
 # ]
 
@@ -77,29 +80,84 @@ def _print_site_summary(site_name, totals):
     print(f"Total failed: {totals['failed']}")
 
 
+def load_existing_links():
+    """
+    Load all existing product links from MongoDB into a set.
+    This allows very fast duplicate checking during scraping.
+    """
+
+    collection = get_collection()
+
+    cursor = collection.find(
+        {"product.link": {"$exists": True}},
+        {"_id": 0, "product.link": 1},
+    )
+
+    links = set()
+
+    for doc in cursor:
+        link = doc.get("product", {}).get("link")
+        if link:
+            links.add(link)
+
+    print(f"[SCRAPER] Loaded {len(links)} existing product links")
+
+    return links
+
+
+def _process_product(scraper_module, driver, wait, product, existing_links):
+    """
+    Worker function for parallel product enrichment.
+    """
+
+    link = product.get("link")
+
+    if not link:
+        return product
+
+    # Normalize link
+    normalized_product = scraper_module.normalize_product(product.copy())
+    normalized_link = normalized_product.get("link")
+
+    # Fast duplicate check using set
+    if SKIP_EXISTING_PRODUCTS and normalized_link and normalized_link in existing_links:
+        return product
+
+    try:
+        extra_info = scraper_module.get_product_extra_info(driver, wait, link)
+        product.update(extra_info)
+    except Exception:
+        pass
+
+    return product
+
+
+# This function is designed to enrich products in parallel using a thread pool.
 def _enrich_products(driver, wait, scraper_module, products):
-    """Fetch extra product details while tolerating per-product failures."""
-    for product in products:
-        link = product.get("link")
-        if not link:
-            continue
+    """
+    Fetch extra product details in parallel with fast duplicate filtering.
+    """
 
-        # Normalize link before checking DB
-        normalized_product = scraper_module.normalize_product(product.copy())
-        normalized_link = normalized_product.get("link")
+    existing_links = load_existing_links()
 
-        if (
-            SKIP_EXISTING_PRODUCTS
-            and normalized_link
-            and product_exists(normalized_link)
-        ):
-            continue
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [
+            executor.submit(
+                _process_product,
+                scraper_module,
+                driver,
+                wait,
+                product,
+                existing_links,
+            )
+            for product in products
+        ]
 
-        try:
-            extra_info = scraper_module.get_product_extra_info(driver, wait, link)
-            product.update(extra_info)
-        except Exception:
-            continue
+        for future in futures:
+            try:
+                future.result()
+            except Exception:
+                pass
 
 
 def _run_query(driver, wait, site_name, scraper_module, query):
@@ -171,10 +229,22 @@ def run_all_sites(queries=None):
         return
 
     try:
+        threads = []
+
         for site_name, scraper_module, prepare_fn in SITE_PIPELINE:
-            run_site(site_name, scraper_module, prepare_fn)
+            thread = threading.Thread(
+                target=run_site,
+                args=(site_name, scraper_module, prepare_fn),
+            )
+
+            thread.start()
+            threads.append(thread)
+
+        # wait for all sites to finish
+        for thread in threads:
+            thread.join()
     finally:
-        pass  # close_client() that was here before threaded execution
+        pass
 
 
 if __name__ == "__main__":
