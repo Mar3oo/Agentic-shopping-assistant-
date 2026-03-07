@@ -1,3 +1,6 @@
+import re
+
+
 CATEGORY_KEYWORDS = {
     # ---------- AUDIO DEVICES ----------
     "wireless_earbuds": [
@@ -85,13 +88,19 @@ def classify_product_type(text):
     if not text:
         return "other"
 
-    text = text.lower()
+    text = str(text).lower()
+
     text = text.replace("-", " ")
     text = text.replace("_", " ")
 
+    # remove punctuation
+    text = re.sub(r"[^\w\s]", " ", text)
+
+    words = text.split()
+
     for category, keywords in CATEGORY_KEYWORDS.items():
         for keyword in keywords:
-            if keyword in text:
+            if keyword in words:
                 return category
 
     return "other"

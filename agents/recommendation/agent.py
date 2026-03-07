@@ -1,9 +1,9 @@
 """
 Recommendation Agent:
-Connects profile → embedding → retrieval → ranking
+Connects profile -> embedding -> retrieval -> ranking
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from agents.recommendation.embedding_model import get_embedding_model
 from agents.recommendation.retriever import ProductRetriever
 from agents.recommendation.scorer import ProductScorer
@@ -11,6 +11,28 @@ from agents.recommendation.bm25_index import BM25Index
 from agents.recommendation.llm_reranker import LLMReranker
 from tools.product_classifier import classify_product_type
 from agents.recommendation.profile_adapter import adapt_profile
+
+
+def detect_product_type(profile: Dict[str, Any]) -> str:
+    """
+    Detect product type from meaningful profile text fields.
+    Accepts either raw profile-agent schema or adapted recommendation schema.
+    """
+
+    normalized = adapt_profile(profile)
+    parts = []
+
+    if normalized.get("category"):
+        parts.append(str(normalized["category"]))
+
+    if normalized.get("use_case"):
+        parts.append(str(normalized["use_case"]))
+
+    if normalized.get("search_queries"):
+        parts.append(" ".join(normalized["search_queries"]))
+
+    detection_text = " ".join(parts).strip()
+    return classify_product_type(detection_text)
 
 
 class RecommendationAgent:
@@ -28,7 +50,6 @@ class RecommendationAgent:
     def _build_user_semantic_text(self, profile: Dict[str, Any]) -> str:
         """
         Convert structured profile into semantic query text.
-        Best practice: structured → natural language format.
         """
 
         parts = []
@@ -64,18 +85,18 @@ class RecommendationAgent:
         # Adapt profile to expected format
         profile = adapt_profile(profile)
 
-        # 1️⃣ Build semantic user text
+        # 1) Build semantic user text
         user_text = self._build_user_semantic_text(profile)
 
         if not user_text.strip():
             raise ValueError("User profile is too empty for recommendation.")
 
-        # 2️⃣ Generate user embedding
+        # 2) Generate user embedding
         user_embedding = self.model.encode([user_text])[0]
 
-        product_type = classify_product_type(profile)
+        product_type = detect_product_type(profile)
 
-        # 3️⃣ Retrieve candidate products
+        # 3) Retrieve candidate products
         query_text = " ".join(profile.get("search_queries", []))
 
         # build BM25 index
@@ -102,7 +123,7 @@ class RecommendationAgent:
         if not candidates:
             return []
 
-        # 4️⃣ Rank
+        # 4) Rank
         ranked = self.scorer.rank_products(
             candidates,
             user_embedding,
@@ -111,7 +132,7 @@ class RecommendationAgent:
             top_k=10,
         )
 
-        # 5️⃣ Rerank with LLM
+        # 5) Rerank with LLM
         query_text = " ".join(profile.get("search_queries", []))
 
         final = self.reranker.rerank(query_text, ranked, top_k=3)

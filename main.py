@@ -9,6 +9,7 @@ from agents.recommendation.chat_handler import RecommendationChatHandler
 from Data_base.feedback_repo import save_feedback
 from Data_base.product_cache import has_enough_products
 from agents.recommendation.agent import detect_product_type
+from agents.recommendation.profile_adapter import adapt_profile
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ def chat_with_profile_agent():
     get_profile_collection().delete_one({"user_id": user_id})
 
     current_profile = None
+    current_profile_data = None
 
     logger.info("\nProfile Agent Started.")
     logger.info("Type 'exit' to stop.")
@@ -35,6 +37,7 @@ def chat_with_profile_agent():
         # Reset command
         if user_input.lower() == "reset":
             current_profile = None
+            current_profile_data = None
             history = []
             last_recommendations = []
             mode = "discovery"
@@ -91,7 +94,7 @@ def chat_with_profile_agent():
                         continue
 
             result = rec_handler.handle(
-                user_input, current_profile.model_dump(), last_recommendations
+                user_input, current_profile_data or {}, last_recommendations
             )
 
             if result["type"] == "recommendation_update":
@@ -114,6 +117,7 @@ def chat_with_profile_agent():
                 logger.info("\nStarting new search...")
                 mode = "discovery"
                 current_profile = None
+                current_profile_data = None
                 history = []
 
             logger.info("\nYou can continue refining or type 'reset' to start over.")
@@ -149,12 +153,13 @@ def chat_with_profile_agent():
             # ==============================
 
             profile_dict = current_profile.model_dump()
+            current_profile_data = adapt_profile(profile_dict)
 
             # detect product type
-            product_type = detect_product_type(profile_dict)
+            product_type = detect_product_type(current_profile_data)
 
-            price_min = profile_dict.get("budget_min")
-            price_max = profile_dict.get("budget_max")
+            price_min = current_profile_data.get("budget_min")
+            price_max = current_profile_data.get("budget_max")
 
             # check cache
             cache_ok = has_enough_products(
@@ -193,9 +198,7 @@ def chat_with_profile_agent():
 
             rec_agent = RecommendationAgent(user_id)
 
-            profile_dict = current_profile.model_dump()
-
-            recommendations = rec_agent.recommend(profile_dict)
+            recommendations = rec_agent.recommend(current_profile_data)
             last_recommendations = recommendations
 
             if not recommendations:
