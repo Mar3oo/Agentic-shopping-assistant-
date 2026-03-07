@@ -11,6 +11,7 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from .base import load_url_with_retry
 
+MAX_PAGES = 1
 
 def get_products(driver):
     """Extract product title, price, and link from the current Jumia results page."""
@@ -70,7 +71,7 @@ def get_all_products(driver, wait, query):
 
     page_num = 1
 
-    while page_num <= 1:
+    while page_num <= MAX_PAGES:
         url = f"https://www.jumia.com.eg/catalog/?q={query_encoded}&page={page_num}"
         print(f"Scraping page {page_num}")
         print("URL:", url)

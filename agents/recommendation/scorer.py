@@ -18,10 +18,12 @@ class ProductScorer:
 
     def __init__(
         self,
+        user_id: str,
         semantic_weight: float = 0.7,
         price_weight: float = 0.2,
         seller_weight: float = 0.1,
     ):
+        self.user_id = user_id
         self.semantic_weight = semantic_weight
         self.price_weight = price_weight
         self.seller_weight = seller_weight
@@ -94,7 +96,7 @@ class ProductScorer:
         """
 
         scored = []
-        feedback = get_user_feedback("user_005")
+        feedback = get_user_feedback(self.user_id)
         liked_links = {f["product_link"] for f in feedback if f["liked"]}
 
         for item in products:

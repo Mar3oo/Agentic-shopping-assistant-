@@ -8,8 +8,16 @@ class BM25Index:
         self.documents = []
         self.products = []
         self.bm25 = None
+        self.current_type = None
 
     def build(self, product_type=None):
+        
+        # prevent rebuilding same index
+        if self.bm25 and self.current_type == product_type:
+            return
+
+        self.current_type = product_type
+        
         query = {"product.embedding": {"$exists": True}}
 
         if product_type:

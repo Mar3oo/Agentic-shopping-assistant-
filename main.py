@@ -11,10 +11,10 @@ from agents.recommendation.agent import detect_product_type
 
 
 def chat_with_profile_agent():
-    user_id = "user_005"
+    user_id = input("Enter user id: ")
     history = []
     mode = "discovery"
-    rec_handler = RecommendationChatHandler()
+    rec_handler = RecommendationChatHandler(user_id)
     last_recommendations = []
 
     # reset profile every run
@@ -188,7 +188,7 @@ def chat_with_profile_agent():
 
             print("\nGenerating recommendations...")
 
-            rec_agent = RecommendationAgent()
+            rec_agent = RecommendationAgent(user_id)
 
             profile_dict = current_profile.model_dump()
 

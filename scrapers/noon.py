@@ -11,6 +11,7 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from .base import load_url_with_retry
 
+MAX_PAGES = 1
 
 def get_products_noon(driver):
     """Extract product title, price, and link from the current Noon results page."""
@@ -72,7 +73,7 @@ def get_all_products(driver, wait, query):
     query_encoded = quote_plus(query)
     page_num = 1
 
-    while page_num <= 1:
+    while page_num <= MAX_PAGES:
         url = f"https://www.noon.com/egypt-en/search?q={query_encoded}&page={page_num}"
         print(f"Scraping page {page_num}")
         print("URL:", url)
