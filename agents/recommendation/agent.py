@@ -32,7 +32,7 @@ def detect_product_type(profile: Dict[str, Any]) -> str:
         parts.append(" ".join(normalized["search_queries"]))
 
     detection_text = " ".join(parts).strip()
-    return classify_product_type(detection_text)
+    return classify_product_type(detection_text, normalized.get("category"))
 
 
 class RecommendationAgent:

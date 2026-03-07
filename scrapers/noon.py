@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 MAX_PAGES = 1
 
+
 def get_products_noon(driver):
     """Extract product title, price, and link from the current Noon results page."""
     products = []
@@ -137,27 +138,51 @@ def get_product_extra_info(driver, wait, link):
         )
 
         try:
-            details_container = driver.find_element(
-                By.CSS_SELECTOR,
-                "div[class*='overview'], div[id*='overview']",
+            wait.until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, 'div[class*="overviewDescriptionWrapper"]')
+                )
             )
-            details_text = details_container.text
+
+            paragraphs = driver.find_elements(
+                By.CSS_SELECTOR, 'div[class*="overviewDescriptionWrapper"] p'
+            )
+
+            details_text = "\n".join(p.text for p in paragraphs if p.text.strip())
+
         except Exception:
             pass
 
         try:
-            seller_score = driver.find_element(
-                By.CSS_SELECTOR,
-                "div[class*='rating'] span",
-            ).text
+            wait.until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, 'div[class*="RatingPreviewStarV2"]')
+                )
+            )
+
+            rating_element = driver.find_element(
+                By.CSS_SELECTOR, 'div[class*="RatingPreviewStarV2"] span[class*="text"]'
+            )
+
+            seller_score = rating_element.text.strip()
+
         except Exception:
             pass
 
         try:
-            breadcrumbs = driver.find_elements(
-                By.CSS_SELECTOR, "a[class*='breadcrumb']"
+            wait.until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, 'div[class*="Breadcrumb"]')
+                )
             )
-            category = ",".join([b.text.strip() for b in breadcrumbs if b.text.strip()])
+
+            breadcrumb_elements = driver.find_elements(
+                By.CSS_SELECTOR, 'div[class*="Breadcrumb"] a'
+            )
+
+            categories = [b.text.strip() for b in breadcrumb_elements if b.text.strip()]
+
+            category = " > ".join(categories)
         except Exception:
             pass
 

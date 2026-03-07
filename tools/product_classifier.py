@@ -83,12 +83,12 @@ CATEGORY_KEYWORDS = {
 }
 
 
-def classify_product_type(text):
+def classify_product_type(search_query, category):
 
-    if not text:
+    if not search_query and not category:
         return "other"
 
-    text = str(text).lower()
+    text = f"{search_query} {category}".lower()
 
     text = text.replace("-", " ")
     text = text.replace("_", " ")

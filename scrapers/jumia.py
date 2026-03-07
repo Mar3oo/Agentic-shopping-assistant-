@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 MAX_PAGES = 1
 
+
 def get_products(driver):
     """Extract product title, price, and link from the current Jumia results page."""
     products = []
@@ -129,28 +130,34 @@ def get_product_extra_info(driver, wait, link):
             driver,
             wait,
             link,
-            lambda w: w.until(EC.presence_of_element_located((By.TAG_NAME, "body"))),
+            lambda w: w.until(
+                EC.presence_of_element_located(((By.CSS_SELECTOR, "div.markup")))
+            ),
             max_attempts=2,
             min_delay=1.5,
             max_delay=3.0,
         )
 
         try:
-            details_container = driver.find_element(
-                By.CSS_SELECTOR, "div.markup.-mhm.-pvl.-oxa.-sc"
-            )
+            details_container = driver.find_element(By.CSS_SELECTOR, "div.markup")
             details_text = details_container.text
         except Exception:
             pass
 
         try:
-            seller_score = driver.find_element(By.CSS_SELECTOR, "bdo.-m.-prxs").text
+            seller_container = driver.find_element(
+                By.XPATH, "//p[contains(., 'Seller Score')]"
+            )
+
+            seller_score = seller_container.find_element(By.TAG_NAME, "bdo").text
         except Exception:
             pass
 
         try:
-            breadcrumbs = driver.find_elements(By.CSS_SELECTOR, "a.cbs")
-            category = ",".join([b.text.strip() for b in breadcrumbs if b.text.strip()])
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.brcbs")))
+
+            categories = driver.find_elements(By.CSS_SELECTOR, "div.brcbs a.cbs")
+            category = " > ".join(c.text.strip() for c in categories if c.text.strip())
         except Exception:
             pass
 

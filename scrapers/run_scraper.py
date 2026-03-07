@@ -2,6 +2,7 @@
 and upserts normalized records to MongoDB."""
 
 import logging
+import os
 import random
 import time
 
@@ -17,17 +18,15 @@ from scrapers.base import build_records, create_brave_driver
 # Add this import to check for existing products before enrichment
 from Data_base.db import get_collection
 
-
-import threading
-from concurrent.futures import ThreadPoolExecutor
+# from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
 SKIP_EXISTING_PRODUCTS = True  # Toggle this when you want
 
 # SEARCH_QUERIES = [
-#     # "laptops for gaming",
-#     "wireless headphones",
+#     "laptop",
+#     # "wireless headphones",
 #     # "smartphones under 3000 EGP",
 # ]
 
@@ -127,6 +126,7 @@ def _process_product(scraper_module, driver, wait, product, existing_links):
         return product
 
     try:
+        # print("Scraping:", link)
         extra_info = scraper_module.get_product_extra_info(driver, wait, link)
         product.update(extra_info)
     except Exception:
@@ -135,32 +135,24 @@ def _process_product(scraper_module, driver, wait, product, existing_links):
     return product
 
 
-# This function is designed to enrich products in parallel using a thread pool.
+existing_links = (
+    load_existing_links()
+)  # Load existing links once at the start of the scraper run
+
+
 def _enrich_products(driver, wait, scraper_module, products):
-    """
-    Fetch extra product details in parallel with fast duplicate filtering.
-    """
 
-    existing_links = load_existing_links()
-
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [
-            executor.submit(
-                _process_product,
+    for product in products:
+        try:
+            _process_product(
                 scraper_module,
                 driver,
                 wait,
                 product,
                 existing_links,
             )
-            for product in products
-        ]
-
-        for future in futures:
-            try:
-                future.result()
-            except Exception:
-                pass
+        except Exception:
+            pass
 
 
 def _run_query(driver, wait, site_name, scraper_module, query):
@@ -186,7 +178,7 @@ def run_site(site_name, scraper_module, prepare_fn):
     if site_name == "noon":
         headless_mode = False  # Set to False for Noon to avoid anti-scraping issues
     else:
-        headless_mode = True
+        headless_mode = False
 
     driver = create_brave_driver(incognito=True, headless=headless_mode)
     wait = WebDriverWait(driver, 10)
@@ -231,21 +223,15 @@ def run_all_sites(queries=None):
         logger.info("No search queries provided.")
         return
 
+    os.system("taskkill /f /im chromedriver.exe >nul 2>&1")
+
     try:
-        threads = []
-
         for site_name, scraper_module, prepare_fn in SITE_PIPELINE:
-            thread = threading.Thread(
-                target=run_site,
-                args=(site_name, scraper_module, prepare_fn),
-            )
+            logger.info(f"[SCRAPER] Starting {site_name} scraper")
 
-            thread.start()
-            threads.append(thread)
+            run_site(site_name, scraper_module, prepare_fn)
 
-        # wait for all sites to finish
-        for thread in threads:
-            thread.join()
+            logger.info(f"[SCRAPER] Finished {site_name}")
     finally:
         pass
 

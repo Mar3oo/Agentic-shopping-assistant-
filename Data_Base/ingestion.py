@@ -116,7 +116,7 @@ def _validate_and_prepare(record: Dict[str, Any]) -> Dict[str, Any]:
         category = str(category).strip()
 
     search_query = metadata.get("search_query")
-    product_type = classify_product_type(search_query)
+    product_type = classify_product_type(search_query, category)
 
     return {
         "metadata": {

@@ -12,20 +12,20 @@ class BM25Index:
         self.current_type = None
 
     def build(self, product_type=None):
-        
+
         if product_type in self.cache:
             cached = self.cache[product_type]
             self.bm25 = cached["bm25"]
             self.documents = cached["documents"]
             self.products = cached["products"]
             return
-    
+
         # prevent rebuilding same index
         if self.bm25 and self.current_type == product_type:
             return
 
         self.current_type = product_type
-        
+
         query = {"product.embedding": {"$exists": True}}
 
         if product_type:
@@ -39,7 +39,7 @@ class BM25Index:
         for doc in cursor:
             product = doc["product"]
 
-            text = f"{product.get('title', '')} {product.get('details_text', '')}"
+            text = f"{product.get('title', '')} {product.get('details_text', '')} {product.get('category', '')}"
             tokens = text.lower().split()
 
             self.documents.append(tokens)

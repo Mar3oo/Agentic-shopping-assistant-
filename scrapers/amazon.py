@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 MAX_PAGES = 1
 
+
 def get_products(driver):
     """Extract product title, price, and link from the current Amazon results page."""
     products = []
@@ -140,26 +141,52 @@ def get_product_extra_info(driver, wait, link):
         )
 
         try:
-            details_text = driver.find_element(
-                By.CSS_SELECTOR, "#productDescription"
-            ).text
+            wait.until(EC.presence_of_element_located((By.ID, "feature-bullets")))
+
+            bullets = driver.find_elements(By.CSS_SELECTOR, "#feature-bullets li")
+            details_list = [
+                b.text.strip()
+                for b in bullets
+                if b.text.strip() and "Loading" not in b.text
+            ]
+
+            details_text = "\n".join(details_list)
+
         except Exception:
             pass
 
         try:
-            seller_score = driver.find_element(
-                By.CSS_SELECTOR,
-                "span.a-size-small.a-color-base",
-            ).text
-        except Exception:
-            pass
-
-        try:
-            breadcrumbs = driver.find_elements(
-                By.CSS_SELECTOR,
-                "#wayfinding-breadcrumbs_feature_div ul li a",
+            wait.until(
+                EC.presence_of_element_located((By.ID, "averageCustomerReviews"))
             )
-            category = ",".join([b.text.strip() for b in breadcrumbs if b.text.strip()])
+
+            rating_element = driver.find_element(
+                By.CSS_SELECTOR, "#averageCustomerReviews span.a-size-small"
+            )
+
+            seller_score = rating_element.text
+
+        except Exception:
+            pass
+
+        try:
+            wait.until(
+                EC.presence_of_element_located(
+                    (By.ID, "wayfinding-breadcrumbs_feature_div")
+                )
+            )
+
+            breadcrumb_elements = driver.find_elements(
+                By.CSS_SELECTOR, "#wayfinding-breadcrumbs_feature_div li"
+            )
+
+            categories = [
+                b.text.strip()
+                for b in breadcrumb_elements
+                if b.text.strip() and "›" not in b.text
+            ]
+
+            category = " > ".join(categories)
         except Exception:
             pass
 
