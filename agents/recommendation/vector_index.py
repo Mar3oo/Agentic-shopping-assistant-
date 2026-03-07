@@ -1,6 +1,10 @@
+import logging
+
 import faiss
 import numpy as np
 from Data_base.db import get_collection
+
+logger = logging.getLogger(__name__)
 
 
 class ProductVectorIndex:
@@ -45,7 +49,7 @@ class ProductVectorIndex:
 
         self.product_type = product_type
 
-        print(f"[FAISS] Index built with {len(self.product_links)} products")
+        logger.info(f"[FAISS] Index built with {len(self.product_links)} products")
 
     def search(self, query_embedding, top_k=50):
 

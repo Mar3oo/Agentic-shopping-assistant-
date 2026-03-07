@@ -1,9 +1,12 @@
+import logging
 from typing import TypedDict, List
 from langgraph.graph import StateGraph, END
 
-from Data_base import db
+from Data_base.db import get_profile_collection
 from scrapers.run_scraper import run_all_sites
 from Data_base.profile_repo import get_profile
+
+logger = logging.getLogger(__name__)
 
 
 # -------------------------
@@ -27,7 +30,7 @@ def load_profile_node(state: CollectorState):
     """
     user_id = state["user_id"]
 
-    print("Loading profile for:", user_id)
+    logger.info(f"Loading profile for: {user_id}")
 
     profile = get_profile(user_id)
 
@@ -36,7 +39,7 @@ def load_profile_node(state: CollectorState):
 
     queries = profile.get("search_queries", [])
 
-    print("Extracted queries:", queries)
+    logger.info(f"Extracted queries: {queries}")
 
     state["queries"] = queries
 
@@ -62,23 +65,23 @@ def run_scraper_node(state: CollectorState):
     queries = state["queries"]
 
     try:
-        print(f"[Collector] Started for {user_id}")
+        logger.info(f"[Collector] Started for {user_id}")
 
         # status = running
-        db.user_profiles.update_one(
+        get_profile_collection().update_one(
             {"user_id": user_id}, {"$set": {"collection_status": "running"}}
         )
 
         run_all_sites(queries)
 
-        print(f"[Collector] Finished for {user_id}")
+        logger.info(f"[Collector] Finished for {user_id}")
 
     except Exception as e:
-        print(f"[Collector ERROR]: {e}")
+        logger.error(f"[Collector ERROR]: {e}")
 
     finally:
         # ALWAYS mark as done (even if error)
-        db.user_profiles.update_one(
+        get_profile_collection().update_one(
             {"user_id": user_id}, {"$set": {"collection_status": "done"}}
         )
 

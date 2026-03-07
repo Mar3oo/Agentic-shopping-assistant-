@@ -1,5 +1,6 @@
 """Jumia scraper that collects products, auto-paginates, and normalizes product fields."""
 
+import logging
 import random
 import re
 import time
@@ -10,6 +11,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 
 from .base import load_url_with_retry
+
+logger = logging.getLogger(__name__)
 
 MAX_PAGES = 1
 
@@ -73,8 +76,8 @@ def get_all_products(driver, wait, query):
 
     while page_num <= MAX_PAGES:
         url = f"https://www.jumia.com.eg/catalog/?q={query_encoded}&page={page_num}"
-        print(f"Scraping page {page_num}")
-        print("URL:", url)
+        logger.info(f"Scraping page {page_num}")
+        logger.info(f"URL: {url}")
 
         try:
             load_url_with_retry(
@@ -96,7 +99,7 @@ def get_all_products(driver, wait, query):
         time.sleep(2)
 
         products = get_products(driver)
-        print("Products found:", len(products))
+        logger.info(f"Products found: {len(products)}")
 
         if not products:
             break

@@ -96,5 +96,3 @@ def product_exists(link):
 # Expose commonly-used collections for modules that import this module directly.
 # This keeps backward compatibility with code that expects attributes like
 # `db.user_profiles` and `db.products_raw`.
-user_profiles = get_profile_collection()
-products_raw = get_collection()

@@ -1,4 +1,5 @@
-from Data_base import db
+import logging
+from Data_base.db import get_profile_collection
 from agents.profile.agent import run_profile_agent
 from Data_base.profile_repo import get_profile, save_profile
 from agents.profile.schemas import UserProfile
@@ -9,6 +10,8 @@ from Data_base.feedback_repo import save_feedback
 from Data_base.product_cache import has_enough_products
 from agents.recommendation.agent import detect_product_type
 
+logger = logging.getLogger(__name__)
+
 
 def chat_with_profile_agent():
     user_id = input("Enter user id: ")
@@ -18,13 +21,13 @@ def chat_with_profile_agent():
     last_recommendations = []
 
     # reset profile every run
-    db.user_profiles.delete_one({"user_id": user_id})
+    get_profile_collection().delete_one({"user_id": user_id})
 
     current_profile = None
 
-    print("\nProfile Agent Started.")
-    print("Type 'exit' to stop.")
-    print("Type 'reset' to start a new product search.\n")
+    logger.info("\nProfile Agent Started.")
+    logger.info("Type 'exit' to stop.")
+    logger.info("Type 'reset' to start a new product search.\n")
 
     user_input = input("You: ")
 
@@ -35,7 +38,7 @@ def chat_with_profile_agent():
             history = []
             last_recommendations = []
             mode = "discovery"
-            print("\nProfile reset. Starting new product search.")
+            logger.info("\nProfile reset. Starting new product search.")
             user_input = input("You: ")
             continue
 
@@ -60,7 +63,7 @@ def chat_with_profile_agent():
 
                         review_text = rec_handler.get_product_reviews(product)
 
-                        print("\n" + review_text)
+                        logger.info("\n" + review_text)
 
                         user_input = input("You: ")
                         continue
@@ -82,7 +85,7 @@ def chat_with_profile_agent():
 
                         comparison = rec_handler.compare_products(p1, p2)
 
-                        print("\n" + comparison)
+                        logger.info("\n" + comparison)
 
                         user_input = input("You: ")
                         continue
@@ -95,25 +98,25 @@ def chat_with_profile_agent():
                 last_recommendations = result["data"]
 
                 if not last_recommendations:
-                    print("No recommendations found.")
+                    logger.info("No recommendations found.")
                 else:
-                    print("\n=== Updated Recommendations ===")
+                    logger.info("\n=== Updated Recommendations ===")
                     for i, rec in enumerate(last_recommendations, 1):
-                        print(f"\nRank {i}")
-                        print("Title:", rec["title"])
-                        print("Price:", rec["price"])
-                        print("Score:", round(rec.get("final_score", 0), 4))
+                        logger.info(f"\nRank {i}")
+                        logger.info(f"Title: {rec['title']}")
+                        logger.info(f"Price: {rec['price']}")
+                        logger.info(f"Score: {round(rec.get('final_score', 0), 4)}")
 
             elif result["type"] == "message":
-                print("\n" + result["data"])
+                logger.info("\n" + result["data"])
 
             elif result["type"] == "new_search":
-                print("\nStarting new search...")
+                logger.info("\nStarting new search...")
                 mode = "discovery"
                 current_profile = None
                 history = []
 
-            print("\nYou can continue refining or type 'reset' to start over.")
+            logger.info("\nYou can continue refining or type 'reset' to start over.")
             user_input = input("You: ")
             continue
 
@@ -125,7 +128,7 @@ def chat_with_profile_agent():
 
         if not output.is_complete:
             question = output.next_question
-            print(f"Agent: {question}")
+            logger.info(f"Agent: {question}")
 
             history.append({"role": "assistant", "content": question})
             user_input = input("You: ")
@@ -133,13 +136,13 @@ def chat_with_profile_agent():
         else:
             # Save profile to Mongo
             save_profile(user_id, current_profile.model_dump())
-            print("\nProfile saved to database.")
+            logger.info("\nProfile saved to database.")
 
-            print("\n=== Profile Complete ===")
-            print(current_profile)
-            print("\nSearch Queries:")
+            logger.info("\n=== Profile Complete ===")
+            logger.info(f"{current_profile}")
+            logger.info("\nSearch Queries:")
             for q in current_profile.search_queries:
-                print("-", q)
+                logger.info(f"- {q}")
 
             # ==============================
             # STEP 4: Trigger Collector (SMART CACHE VERSION)
@@ -161,10 +164,10 @@ def chat_with_profile_agent():
             )
 
             if cache_ok:
-                print("\nUsing cached products from database. Skipping scraping.")
+                logger.info("\nUsing cached products from database. Skipping scraping.")
 
             else:
-                profile_doc = db.user_profiles.find_one({"user_id": user_id})
+                profile_doc = get_profile_collection().find_one({"user_id": user_id})
                 status = (
                     profile_doc.get("collection_status", "idle")
                     if profile_doc
@@ -172,21 +175,21 @@ def chat_with_profile_agent():
                 )
 
                 if status == "running":
-                    print("\nCollector is already running for this user.")
+                    logger.info("\nCollector is already running for this user.")
 
                 else:
                     state = {"user_id": user_id, "queries": []}
 
-                    print("\nStarting Collector...")
+                    logger.info("\nStarting Collector...")
 
                     collector_graph.invoke(state)
 
-                    print("Collector finished.")
+                    logger.info("Collector finished.")
             # ==============================
             # STEP 6: Run Recommendation Agent
             # ==============================
 
-            print("\nGenerating recommendations...")
+            logger.info("\nGenerating recommendations...")
 
             rec_agent = RecommendationAgent(user_id)
 
@@ -196,16 +199,16 @@ def chat_with_profile_agent():
             last_recommendations = recommendations
 
             if not recommendations:
-                print("No recommendations found based on your profile.")
+                logger.info("No recommendations found based on your profile.")
             else:
-                print("\n=== Top Recommendations ===")
+                logger.info("\n=== Top Recommendations ===")
                 for i, rec in enumerate(recommendations, 1):
-                    print(f"\nRank {i}")
-                    print("Title:", rec["title"])
-                    print("Price:", rec["price"])
-                    print("Score:", round(rec["final_score"], 4))
+                    logger.info(f"\nRank {i}")
+                    logger.info(f"Title: {rec['title']}")
+                    logger.info(f"Price: {rec['price']}")
+                    logger.info(f"Score: {round(rec['final_score'], 4)}")
 
-                print("\nWhich recommendation do you prefer? (1 / 2 / 3 / none)")
+                logger.info("\nWhich recommendation do you prefer? (1 / 2 / 3 / none)")
                 choice = input("Choice: ").strip()
 
                 if choice in ["1", "2", "3"]:
@@ -214,7 +217,7 @@ def chat_with_profile_agent():
 
                     save_feedback(user_id, selected["link"], liked=True)
 
-                    print(
+                    logger.info(
                         "Feedback saved. We'll prioritize similar products next time."
                     )
 
@@ -222,11 +225,11 @@ def chat_with_profile_agent():
                     for r in recommendations:
                         save_feedback(user_id, r["link"], liked=False)
 
-                    print("Got it. We'll avoid similar products next time.")
+                    logger.info("Got it. We'll avoid similar products next time.")
 
                 mode = "recommendation"
 
-            print("\nYou can type 'reset' to search for another product.")
+            logger.info("\nYou can type 'reset' to search for another product.")
             user_input = input("You: ")
 
 

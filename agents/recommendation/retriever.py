@@ -18,6 +18,7 @@ class ProductRetriever:
     def __init__(self):
         self.collection = get_collection()
         self.vector_index = ProductVectorIndex()
+        self.cache = {}
 
     def retrieve_candidates(
         self,
@@ -65,6 +66,16 @@ class ProductRetriever:
             if links:
                 query["product.link"] = {"$in": links}
 
+        cache_key = (product_type, price_min, price_max)
+
+        if user_embedding is None and cache_key in self.cache:
+            return self.cache[cache_key]
+
         cursor = self.collection.find(query, projection).limit(limit)
 
-        return list(cursor)
+        results = list(cursor)
+
+        if user_embedding is None:
+            self.cache[cache_key] = results
+
+        return results

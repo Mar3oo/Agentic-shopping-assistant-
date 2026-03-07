@@ -7,11 +7,19 @@ class BM25Index:
         self.collection = get_collection()
         self.documents = []
         self.products = []
+        self.cache = {}
         self.bm25 = None
         self.current_type = None
 
     def build(self, product_type=None):
         
+        if product_type in self.cache:
+            cached = self.cache[product_type]
+            self.bm25 = cached["bm25"]
+            self.documents = cached["documents"]
+            self.products = cached["products"]
+            return
+    
         # prevent rebuilding same index
         if self.bm25 and self.current_type == product_type:
             return
@@ -39,6 +47,11 @@ class BM25Index:
 
         if self.documents:
             self.bm25 = BM25Okapi(self.documents)
+            self.cache[product_type] = {
+                "bm25": self.bm25,
+                "documents": self.documents,
+                "products": self.products,
+            }
 
     def search(self, query_text, top_k=20):
         if not self.bm25:

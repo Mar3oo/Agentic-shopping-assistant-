@@ -19,7 +19,7 @@ CATEGORY_KEYWORDS = {
     "soundbar": ["soundbar", "tv soundbar"],
     "subwoofer": ["subwoofer", "bass speaker"],
     # ---------- COMPUTERS ----------
-    "gaming_laptop": ["gaming laptop", "rtx laptop", "gaming notebook"],
+    "gaming_laptop": ["gaming laptop", "gaming notebook"],
     "laptop": ["laptop", "notebook", "ultrabook", "macbook"],
     "desktop": ["desktop pc", "desktop computer", "tower pc"],
     "all_in_one_pc": ["all in one pc", "aio computer"],
