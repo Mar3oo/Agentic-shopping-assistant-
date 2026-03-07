@@ -1,6 +1,7 @@
 """Automated runner that scrapes configured sites/queries
 and upserts normalized records to MongoDB."""
 
+import logging
 import random
 import time
 
@@ -19,6 +20,8 @@ from Data_base.db import get_collection
 
 import threading
 from concurrent.futures import ThreadPoolExecutor
+
+logger = logging.getLogger(__name__)
 
 SKIP_EXISTING_PRODUCTS = True  # Toggle this when you want
 
@@ -63,21 +66,21 @@ SITE_PIPELINE = [
 
 def _print_query_summary(site_name, query, summary):
     """Print query-level ingestion summary in the requested format."""
-    print(f"Site: {site_name}")
-    print(f"Query: {query}")
-    print(f"Inserted: {summary['inserted']}")
-    print(f"Updated: {summary['updated']}")
-    print(f"Failed: {summary['failed']}")
+    logger.info(f"Site: {site_name}")
+    logger.info(f"Query: {query}")
+    logger.info(f"Inserted: {summary['inserted']}")
+    logger.info(f"Updated: {summary['updated']}")
+    logger.info(f"Failed: {summary['failed']}")
     for error in summary.get("error_samples", []):
-        print(f"Failure sample: {error}")
+        logger.info(f"Failure sample: {error}")
 
 
 def _print_site_summary(site_name, totals):
     """Print site-level totals after all queries are processed."""
-    print(f"Site: {site_name}")
-    print(f"Total inserted: {totals['inserted']}")
-    print(f"Total updated: {totals['updated']}")
-    print(f"Total failed: {totals['failed']}")
+    logger.info(f"Site: {site_name}")
+    logger.info(f"Total inserted: {totals['inserted']}")
+    logger.info(f"Total updated: {totals['updated']}")
+    logger.info(f"Total failed: {totals['failed']}")
 
 
 def load_existing_links():
@@ -100,7 +103,7 @@ def load_existing_links():
         if link:
             links.add(link)
 
-    print(f"[SCRAPER] Loaded {len(links)} existing product links")
+    logger.info(f"[SCRAPER] Loaded {len(links)} existing product links")
 
     return links
 
@@ -198,7 +201,7 @@ def run_site(site_name, scraper_module, prepare_fn):
                 summary = _run_query(driver, wait, site_name, scraper_module, query)
             except Exception as exc:
                 summary["failed"] += 1
-                print(
+                logger.error(
                     f"Query processing failed for site={site_name}, query='{query}': {exc}"
                 )
 
@@ -225,7 +228,7 @@ def run_all_sites(queries=None):
     SEARCH_QUERIES = queries
 
     if not SEARCH_QUERIES:
-        print("No search queries provided.")
+        logger.info("No search queries provided.")
         return
 
     try:

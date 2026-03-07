@@ -58,10 +58,17 @@ User message:
 
         content = response.choices[0].message.content.strip()
 
+        # try extracting JSON from text
+        start = content.find("{")
+        end = content.rfind("}") + 1
+
+        if start != -1 and end != -1:
+            content = content[start:end]
+
         try:
             return json.loads(content)
+
         except json.JSONDecodeError:
-            # Fallback if LLM misbehaves
             return {
                 "intent": "general_question",
                 "budget_min": None,

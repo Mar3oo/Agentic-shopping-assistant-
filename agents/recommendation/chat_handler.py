@@ -18,9 +18,9 @@ load_dotenv()
 
 
 class RecommendationChatHandler:
-    def __init__(self):
+    def __init__(self, user_id: str):
         self.router = RecommendationIntentRouter(api_key=os.getenv("GROQ_API_KEY"))
-        self.rec_agent = RecommendationAgent()
+        self.rec_agent = RecommendationAgent(user_id)
         self.llm = Groq(api_key=os.getenv("GROQ_API_KEY"))
         self.model = "llama-3.3-70b-versatile"
 

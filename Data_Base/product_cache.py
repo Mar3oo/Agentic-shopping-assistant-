@@ -1,4 +1,8 @@
+import logging
+
 from Data_base.db import get_collection
+
+logger = logging.getLogger(__name__)
 
 
 def has_enough_products(
@@ -34,6 +38,6 @@ def has_enough_products(
 
     count = collection.count_documents(query)
 
-    print(f"[CACHE CHECK] Found {count} products for type={product_type}")
+    logger.info(f"[CACHE CHECK] Found {count} products for type={product_type}")
 
     return count >= min_count

@@ -10,6 +10,7 @@ from agents.recommendation.scorer import ProductScorer
 from agents.recommendation.bm25_index import BM25Index
 from agents.recommendation.llm_reranker import LLMReranker
 from tools.product_classifier import classify_product_type
+from agents.recommendation.profile_adapter import adapt_profile
 
 
 class RecommendationAgent:
@@ -17,10 +18,10 @@ class RecommendationAgent:
     Main recommendation pipeline.
     """
 
-    def __init__(self):
+    def __init__(self, user_id: str):
         self.model = get_embedding_model()
         self.retriever = ProductRetriever()
-        self.scorer = ProductScorer()
+        self.scorer = ProductScorer(user_id)
         self.bm25 = BM25Index()
         self.reranker = LLMReranker()
 
@@ -60,6 +61,8 @@ class RecommendationAgent:
         """
         Full recommendation pipeline.
         """
+        # Adapt profile to expected format
+        profile = adapt_profile(profile)
 
         # 1️⃣ Build semantic user text
         user_text = self._build_user_semantic_text(profile)
