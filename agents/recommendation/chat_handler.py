@@ -11,7 +11,12 @@ from groq import Groq
 from agents.recommendation.intent_router import RecommendationIntentRouter
 from agents.recommendation.agent import RecommendationAgent
 
-from agents.reviews.youtube_service import search_youtube, get_transcripts_for_videos
+from agents.reviews.youtube_service import (
+    search_youtube,
+    get_transcripts_for_videos,
+    extract_product_name,
+)
+
 from agents.reviews.sentiment_analyzer import analyze_reviews
 
 load_dotenv()
@@ -110,13 +115,14 @@ class RecommendationChatHandler:
         if intent == "review_sentiment":
             product = current_recommendations[0]
 
-            videos = search_youtube(product["title"] + " review")
+            clean_title = extract_product_name(product["title"])
+            videos = search_youtube(clean_title + " review")
 
             video_ids = [v["video_id"] for v in videos]
 
             transcripts = get_transcripts_for_videos(video_ids)
 
-            sentiment = analyze_reviews(product["title"], transcripts)
+            sentiment = analyze_reviews(clean_title, transcripts)
 
             return {"type": "message", "data": sentiment}
 

@@ -63,7 +63,8 @@ class RecommendationAgent:
             )
 
         if profile.get("preferences"):
-            parts.append(f"Preferences: {profile['preferences']}")
+            prefs = ", ".join(f"{k} {v}" for k, v in profile["preferences"].items())
+            parts.append(f"Preferences: {prefs}")
 
         if profile.get("use_case"):
             parts.append(f"Use case: {profile['use_case']}")
@@ -73,6 +74,21 @@ class RecommendationAgent:
             parts.append(f"Search intent: {joined}")
 
         return "\n".join(parts)
+
+    def _build_bm25_query(self, profile: Dict[str, Any]) -> str:
+        parts = []
+
+        if profile.get("category"):
+            parts.append(profile["category"])
+
+        if profile.get("use_case"):
+            parts.append(profile["use_case"])
+
+        if profile.get("preferences"):
+            prefs = " ".join(profile["preferences"].values())
+            parts.append(prefs)
+
+        return " ".join(parts)
 
     def recommend(
         self,
@@ -97,12 +113,13 @@ class RecommendationAgent:
         product_type = detect_product_type(profile)
 
         # 3) Retrieve candidate products
-        query_text = " ".join(profile.get("search_queries", []))
+
+        query_text = self._build_bm25_query(profile)
 
         # build BM25 index
         self.bm25.build(product_type)
 
-        bm25_results = self.bm25.search(query_text, top_k=50)
+        bm25_results = self.bm25.search(query_text, top_k=20)
 
         semantic_candidates = self.retriever.retrieve_candidates(
             product_type=product_type,
@@ -112,7 +129,9 @@ class RecommendationAgent:
         )
 
         # merge both candidate lists
-        candidates = semantic_candidates + [{"product": p} for p in bm25_results]
+        bm25_candidates = [{"product": p} for p in bm25_results]
+        candidates = semantic_candidates + bm25_candidates
+
         unique = {}
         for item in candidates:
             p = item["product"]
@@ -133,8 +152,8 @@ class RecommendationAgent:
         )
 
         # 5) Rerank with LLM
-        query_text = " ".join(profile.get("search_queries", []))
+        # query_text = " ".join(profile.get("search_queries", []))
 
-        final = self.reranker.rerank(query_text, ranked, top_k=3)
+        final = self.reranker.rerank(user_text, ranked, top_k=3)
 
         return final

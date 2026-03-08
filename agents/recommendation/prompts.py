@@ -11,6 +11,7 @@ Analyze the user message and classify it into ONE of these intents:
 - ask_explanation
 - general_question
 - new_search
+- review_sentiment
 
 Return ONLY valid JSON with this format:
 
@@ -27,6 +28,7 @@ Rules:
 - If asking why recommended → ask_explanation
 - If asking about specs or product details → general_question
 - If clearly wants totally new search → new_search
+- If asking about reviews or sentiment → review_sentiment
 - If unsure → general_question
 
 Return JSON only.

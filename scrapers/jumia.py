@@ -70,7 +70,7 @@ def get_all_products(driver, wait, query):
     all_products = []
 
     # Jumia works better with simple keywords
-    main_keyword = query.split()[0]
+    main_keyword = query.split()
     query_encoded = quote_plus(main_keyword)
 
     page_num = 1
@@ -139,7 +139,9 @@ def get_product_extra_info(driver, wait, link):
         )
 
         try:
-            details_container = driver.find_element(By.CSS_SELECTOR, "div.markup")
+            details_container = driver.find_element(
+                By.CSS_SELECTOR, "#description + header + div[class*='markup']"
+            )
             details_text = details_container.text
         except Exception:
             pass

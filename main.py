@@ -134,6 +134,10 @@ def chat_with_profile_agent():
             question = output.next_question
             print(f"Agent: {question}")
 
+            if output.choices:
+                for i, c in enumerate(output.choices, 1):
+                    print(f"{i}. {c}")
+
             history.append({"role": "assistant", "content": question})
             user_input = input("You: ")
 
@@ -209,7 +213,7 @@ def chat_with_profile_agent():
                     print(f"\nRank {i}")
                     print(f"Title: {rec['title']}")
                     print(f"Price: {rec['price']}")
-                    print(f"Score: {round(rec['final_score'], 4)}")
+                    # print(f"Score: {round(rec['final_score'], 4)}")
 
                 print("\nWhich recommendation do you prefer? (1 / 2 / 3 / none)")
                 choice = input("Choice: ").strip()

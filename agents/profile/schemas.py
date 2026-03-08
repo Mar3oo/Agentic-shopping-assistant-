@@ -27,3 +27,4 @@ class ProfileAgentOutput(BaseModel):
     missing_fields: List[str]
     is_complete: bool
     next_question: Optional[str] = None
+    choices: Optional[List[str]] = None

@@ -223,8 +223,6 @@ def run_all_sites(queries=None):
         logger.info("No search queries provided.")
         return
 
-    os.system("taskkill /f /im chromedriver.exe >nul 2>&1")
-
     try:
         for site_name, scraper_module, prepare_fn in SITE_PIPELINE:
             logger.info(f"[SCRAPER] Starting {site_name} scraper")

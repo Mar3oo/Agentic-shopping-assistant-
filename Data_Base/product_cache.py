@@ -26,15 +26,15 @@ def has_enough_products(
     if product_type:
         query["product.product_type"] = product_type
 
-    # filter by price
-    if price_min is not None or price_max is not None:
-        query["product.price"] = {}
+    # # filter by price
+    # if price_min is not None or price_max is not None:
+    #     query["product.price"] = {}
 
-        if price_min is not None:
-            query["product.price"]["$gte"] = price_min
+    #     if price_min is not None:
+    #         query["product.price"]["$gte"] = price_min
 
-        if price_max is not None:
-            query["product.price"]["$lte"] = price_max
+    #     if price_max is not None:
+    #         query["product.price"]["$lte"] = price_max
 
     count = collection.count_documents(query)
 
