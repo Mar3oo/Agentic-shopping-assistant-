@@ -30,7 +30,7 @@ def load_profile_node(state: CollectorState):
     """
     user_id = state["user_id"]
 
-    logger.info(f"Loading profile for: {user_id}")
+    print(f"Loading profile for: {user_id}")
 
     profile = get_profile(user_id)
 
@@ -39,7 +39,7 @@ def load_profile_node(state: CollectorState):
 
     queries = profile.get("search_queries", [])
 
-    logger.info(f"Extracted queries: {queries}")
+    print(f"Extracted queries: {queries}")
 
     state["queries"] = queries
 
@@ -65,7 +65,7 @@ def run_scraper_node(state: CollectorState):
     queries = state["queries"]
 
     try:
-        logger.info(f"[Collector] Started for {user_id}")
+        print(f"[Collector] Started for {user_id}")
 
         # status = running
         get_profile_collection().update_one(
@@ -74,10 +74,10 @@ def run_scraper_node(state: CollectorState):
 
         run_all_sites(queries)
 
-        logger.info(f"[Collector] Finished for {user_id}")
+        print(f"[Collector] Finished for {user_id}")
 
     except Exception as e:
-        logger.error(f"[Collector ERROR]: {e}")
+        print(f"[Collector ERROR]: {e}")
 
     finally:
         # ALWAYS mark as done (even if error)

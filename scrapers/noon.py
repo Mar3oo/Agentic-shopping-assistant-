@@ -137,21 +137,47 @@ def get_product_extra_info(driver, wait, link):
             max_delay=3.0,
         )
 
+        details_parts = []
+
         try:
-            wait.until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, 'div[class*="overviewDescriptionWrapper"]')
-                )
+            # -------------------------
+            # 1. Extract Highlights
+            # -------------------------
+            highlights = driver.find_elements(
+                By.CSS_SELECTOR, 'div[class*="OverviewTab"] ul li'
             )
 
-            paragraphs = driver.find_elements(
-                By.CSS_SELECTOR, 'div[class*="overviewDescriptionWrapper"] p'
-            )
-
-            details_text = "\n".join(p.text for p in paragraphs if p.text.strip())
+            for item in highlights:
+                text = item.text.strip()
+                if text:
+                    details_parts.append(text)
 
         except Exception:
             pass
+
+        try:
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2)")
+            time.sleep(1)
+            # -------------------------
+            # 2. Extract Specifications
+            # -------------------------
+            specs = driver.find_elements(
+                By.CSS_SELECTOR, 'div[class*="SpecificationsTab"] div'
+            )
+
+            for s in specs:
+                text = s.text.strip()
+                if text and len(text) < 100:  # avoid huge blocks
+                    details_parts.append(text)
+
+        except Exception:
+            pass
+
+        # -------------------------
+        # 3. Combine everything
+        # -------------------------
+        if details_parts:
+            details_text = "\n".join(details_parts)
 
         try:
             wait.until(
