@@ -4,3 +4,5 @@ __pycache__/
 .env
 *.json
 .vscode/
+docs/
+.pytest_cache/
