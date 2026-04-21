@@ -72,7 +72,10 @@ class SearchPipeline:
         if not extracted_products:
             extracted_products = self._build_fallback_products(search_results)
 
-        cleaned_products = clean_products(extracted_products)
+        cleaned_products = clean_products(
+            extracted_products,
+            search_results=search_results,
+        )
         if not cleaned_products:
             _log("No products remained after cleaning.")
             return []

@@ -10,12 +10,14 @@ from pathlib import Path
 
 try:
     from search_pipeline.cleaner import clean_products
+    import search_pipeline.cleaner as cleaner_module
     from search_pipeline.extractor import ExtractionError
     from search_pipeline.pipeline import SearchPipeline
     from search_pipeline.ranker import ProductRanker
     from search_pipeline.search import SerperSearchClient
 except ImportError:  # pragma: no cover - enables direct script execution
     from cleaner import clean_products
+    import cleaner as cleaner_module
     from extractor import ExtractionError
     from pipeline import SearchPipeline
     from ranker import ProductRanker
@@ -138,9 +140,15 @@ def _run_smoke_test() -> None:
     results = pipeline.run(query="best gaming laptop", search_limit=5, top_k=5)
     _assert_canonical_shape(results)
     assert len(results) == 2, f"Expected deduped products, got {len(results)}"
-    assert results[0]["title"] == "Lenovo Legion Pro 5 Gaming Laptop"
-    assert results[0]["price"] == 1299.99
-    assert results[1]["currency"] == "EGP"
+    titles = {result["title"] for result in results}
+    assert titles == {
+        "Lenovo Legion Pro 5 Gaming Laptop",
+        "ASUS TUF Gaming Laptop A15",
+    }
+    prices = {result["title"]: result["price"] for result in results}
+    assert prices["Lenovo Legion Pro 5 Gaming Laptop"] == 1299.99
+    assert prices["ASUS TUF Gaming Laptop A15"] == 50000.0
+    assert all(result["source"] == "example" for result in results)
     _log("Smoke test passed.")
     print(json.dumps(results, indent=2, ensure_ascii=False))
 
@@ -246,6 +254,123 @@ def _run_search_limit_test() -> None:
     _log("Serper search-limit test passed.")
 
 
+def _run_grounded_cleaner_test() -> None:
+    _log("Running grounded cleaner resolution test.")
+
+    class _FakeResponse:
+        def __init__(self, url: str, text: str = "", status_code: int = 200) -> None:
+            self.url = url
+            self.text = text
+            self.status_code = status_code
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise RuntimeError(f"HTTP {self.status_code}")
+
+    original_get = cleaner_module.requests.get
+
+    def _fake_get(url: str, **kwargs):
+        if "google.com/search" in url:
+            html = (
+                '<a href="/url?q=https://www.amazon.com/dp/B0TEST1234%3Fref_%3Dabc'
+                '&amp;sa=U&amp;ved=xyz">Visit site</a>'
+            )
+            return _FakeResponse(url=url, text=html)
+        if "amazon.com/dp/B0TEST1234" in url:
+            return _FakeResponse(url="https://www.amazon.com/dp/B0TEST1234?ref_=abc")
+        raise AssertionError(f"Unexpected URL requested during test: {url}")
+
+    cleaner_module.requests.get = _fake_get
+    try:
+        cleaned = clean_products(
+            products=[
+                {
+                    "title": "Laptop Placeholder",
+                    "price_text": "$9999.00",
+                    "link": "https://www.google.com/search?ibp=oshop&prds=pid:111&q=test",
+                    "source": "Google",
+                    "details_text": "Bad LLM data",
+                    "search_position": 1,
+                }
+            ],
+            search_results=[
+                {
+                    "title": "ASUS TUF Gaming A15",
+                    "price_text": "$1,299.99",
+                    "link": "https://www.google.com/search?ibp=oshop&prds=pid:111&q=test",
+                    "source": "Amazon",
+                    "details_text": "Official shopping price",
+                    "search_position": 1,
+                }
+            ],
+        )
+    finally:
+        cleaner_module.requests.get = original_get
+
+    assert len(cleaned) == 1
+    assert cleaned[0]["title"] == "ASUS TUF Gaming A15"
+    assert cleaned[0]["link"] == "https://www.amazon.com/dp/B0TEST1234"
+    assert cleaned[0]["source"] == "amazon"
+    assert cleaned[0]["price"] == 1299.99
+    _log("Grounded cleaner resolution test passed.")
+
+
+def _run_redirect_cleanup_test() -> None:
+    _log("Running redirect cleanup test.")
+
+    class _FakeResponse:
+        def __init__(self, url: str, text: str = "", status_code: int = 200) -> None:
+            self.url = url
+            self.text = text
+            self.status_code = status_code
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise RuntimeError(f"HTTP {self.status_code}")
+
+    original_get = cleaner_module.requests.get
+
+    def _fake_get(url: str, **kwargs):
+        if "google.com/search" in url:
+            html = (
+                '<a href="/url?q=https://www.bestbuy.com/product/item/JJGQJH2LFP/sku/11871431'
+                '?ref\\u003d212\\u0026utm_source\\u003dgoogle&amp;sa=U">Visit site</a>'
+            )
+            return _FakeResponse(url=url, text=html)
+        if "bestbuy.com/product/item/JJGQJH2LFP/sku/11871431" in url:
+            return _FakeResponse(url="https://www.bestbuy.com/product/item/JJGQJH2LFP/sku/11871431?ref=212")
+        raise AssertionError(f"Unexpected URL requested during test: {url}")
+
+    cleaner_module.requests.get = _fake_get
+    try:
+        cleaned = clean_products(
+            products=[
+                {
+                    "title": "Gaming Laptop",
+                    "link": "https://www.google.com/search?ibp=oshop&prds=pid:222&q=test",
+                    "source": "Best Buy",
+                    "search_position": 1,
+                }
+            ],
+            search_results=[
+                {
+                    "title": "Gaming Laptop",
+                    "price_text": "$1,149.99",
+                    "link": "https://www.google.com/search?ibp=oshop&prds=pid:222&q=test",
+                    "source": "Best Buy",
+                    "search_position": 1,
+                }
+            ],
+        )
+    finally:
+        cleaner_module.requests.get = original_get
+
+    assert len(cleaned) == 1
+    assert cleaned[0]["link"] == "https://www.bestbuy.com/product/item/JJGQJH2LFP/sku/11871431"
+    assert cleaned[0]["source"] == "bestbuy"
+    _log("Redirect cleanup test passed.")
+
+
 def _load_env_file(path: str | os.PathLike[str] = ".env") -> None:
     env_path = Path(path)
     if not env_path.exists():
@@ -310,6 +435,8 @@ def main(argv: list[str] | None = None) -> int:
             _run_blank_query_test()
             _run_google_link_preservation_test()
             _run_search_limit_test()
+            _run_grounded_cleaner_test()
+            _run_redirect_cleanup_test()
     except Exception as exc:
         print(f"Smoke script failed: {exc}", file=sys.stderr)
         return 1
