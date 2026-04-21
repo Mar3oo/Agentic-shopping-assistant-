@@ -1,5 +1,5 @@
-from youtube_service import search_youtube, get_transcripts_for_videos
-from sentiment_analyzer import analyze_reviews
+from agents.reviews.youtube_service import search_youtube, get_transcripts_for_videos
+from agents.reviews.sentiment_analyzer import analyze_reviews
 from groq import Groq
 import os
 from dotenv import load_dotenv
@@ -68,6 +68,21 @@ class ReviewAgent:
 
         result = analyze_reviews(self.product, transcripts)
 
+        # attach YouTube sources
+        sources = [
+            {
+                "title": v["title"],
+                "url": v["link"],
+                "thumbnail": f"https://img.youtube.com/vi/{v['video_id']}/hqdefault.jpg",
+            }
+            for v in videos[:3]
+        ]
+
+        # merge into result
+        if isinstance(result, dict):
+            result["sources"] = sources
+
+        # store
         self.reviews_data = result
 
         return result
@@ -78,20 +93,20 @@ class ReviewAgent:
             return "No review data available."
 
         prompt = f"""
-                You are answering a follow-up question about a product.
+You are answering a follow-up question about a product.
 
-                Product: {self.product}
+Product: {self.product}
 
-                Existing review summary:
-                ----------------
-                {self.reviews_data}
-                ----------------
+Existing review summary:
+----------------
+{self.reviews_data}
+----------------
 
-                User question:
-                {user_input}
+User question:
+{user_input}
 
-                Answer briefly and do NOT repeat the full review.
-                """
+Answer briefly and do NOT repeat the full review.
+"""
 
         response = self.client.chat.completions.create(
             model=self.model,

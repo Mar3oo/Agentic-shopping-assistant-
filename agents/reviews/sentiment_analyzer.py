@@ -1,6 +1,7 @@
 from groq import Groq
 import os
 from dotenv import load_dotenv
+import json
 
 load_dotenv()
 
@@ -14,39 +15,55 @@ def analyze_reviews(product_name, transcripts):
     combined = " ".join(transcripts[:2])[:6000]
 
     prompt = f"""
-            You are an expert product review analyst.
+You are an expert product review analyst.
 
-            Product:
-            {product_name}
+Product:
+{product_name}
 
-            Review data:
-            ----------------
-            {combined}
-            ----------------
+Review data:
+----------------
+{combined}
+----------------
 
-            Return TWO sections:
+Return ONLY valid JSON.
 
-            === QUICK SUMMARY ===
-            - Overall verdict (1–2 lines)
-            - Sentiment score
-            - Top 3 pros
-            - Top 2 cons
-            - Value for money (1 line)
+FORMAT:
 
-            === DETAILED ANALYSIS ===
-            1) PROS (full)
-            2) CONS (full)
-            3) KEY INSIGHTS
-            4) WHO IS THIS FOR
+{{
+  "summary": "2-3 lines overall verdict",
+  "sentiment_score": "positive / neutral / negative",
+  "pros": ["...", "...", "..."],
+  "cons": ["...", "..."],
+  "value_for_money": "short statement",
+  "insights": ["...", "..."],
+  "best_for": ["...", "..."]
+}}
 
-            Rules:
-            - Do NOT repeat information between sections
-            - Keep quick summary very concise
-            - Use ONLY the provided data
-            """
+RULES:
+- No markdown
+- No extra text
+- Keep it concise
+"""
 
     response = client.chat.completions.create(
         model=MODEL, messages=[{"role": "user", "content": prompt}], temperature=0.3
     )
 
-    return response.choices[0].message.content
+    raw = response.choices[0].message.content
+
+    try:
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        cleaned = raw[start:end]
+
+        return json.loads(cleaned)
+    except Exception:
+        return {
+            "summary": "Could not analyze reviews",
+            "sentiment_score": "unknown",
+            "pros": [],
+            "cons": [],
+            "value_for_money": "",
+            "insights": [],
+            "best_for": [],
+        }
