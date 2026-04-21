@@ -50,49 +50,6 @@ def chat_with_profile_agent():
             output, raw = run_profile_agent(user_input, history, current_profile)
 
         elif mode == "recommendation":
-            # -----------------------------
-            # Review sentiment command
-            # -----------------------------
-            if user_input.lower().startswith("review"):
-                parts = user_input.lower().split()
-
-                numbers = [int(p) for p in parts if p.isdigit()]
-
-                if len(numbers) == 1:
-                    i = numbers[0]
-
-                    if 1 <= i <= len(last_recommendations):
-                        product = last_recommendations[i - 1]
-
-                        review_text = rec_handler.get_product_reviews(product)
-
-                        print("\n" + review_text)
-
-                        user_input = input("You: ")
-                        continue
-
-            # check comparison command
-            if user_input.lower().startswith("compare"):
-                parts = user_input.lower().split()
-
-                numbers = [int(p) for p in parts if p.isdigit()]
-
-                if len(numbers) == 2:
-                    i, j = numbers
-
-                    if 1 <= i <= len(last_recommendations) and 1 <= j <= len(
-                        last_recommendations
-                    ):
-                        p1 = last_recommendations[i - 1]
-                        p2 = last_recommendations[j - 1]
-
-                        comparison = rec_handler.compare_products(p1, p2)
-
-                        print("\n" + comparison)
-
-                        user_input = input("You: ")
-                        continue
-
             result = rec_handler.handle(
                 user_input, current_profile_data or {}, last_recommendations
             )

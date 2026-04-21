@@ -1,9 +1,10 @@
 """
 Recommendation Mode Chat Handler.
-Executes actions based on LLM intent classification.
+Handles refinement vs new search cleanly.
 """
 
 import os
+import logging
 from typing import Dict, Any, List
 from dotenv import load_dotenv
 from groq import Groq
@@ -11,15 +12,33 @@ from groq import Groq
 from agents.recommendation.intent_router import RecommendationIntentRouter
 from agents.recommendation.agent import RecommendationAgent
 
-from agents.reviews.youtube_service import (
-    search_youtube,
-    get_transcripts_for_videos,
-    extract_product_name,
-)
-
-from agents.reviews.sentiment_analyzer import analyze_reviews
-
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+
+def adjust_budget_from_preferences(profile, recommendations, preferences):
+    if "price" not in preferences:
+        return profile
+
+    strength = preferences["price"]
+
+    if not recommendations:
+        return profile
+
+    prices = [p["price"] for p in recommendations if p.get("price")]
+
+    if not prices:
+        return profile
+
+    avg_price = sum(prices) / len(prices)
+
+    # smarter adjustment
+    new_max = avg_price * (1 - 0.3 * strength)
+
+    profile["budget_max"] = new_max
+
+    return profile
 
 
 class RecommendationChatHandler:
@@ -35,20 +54,25 @@ class RecommendationChatHandler:
         current_profile: Dict[str, Any],
         current_recommendations: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """
-        Returns:
-        {
-            "type": "...",
-            "data": ...
-        }
-        """
 
         intent_data = self.router.route(user_message, current_recommendations)
-
         intent = intent_data.get("intent")
 
+        logger.info(f"[ChatHandler] Intent: {intent}")
+
         # -----------------------------
-        # 1️⃣ Budget refinement
+        # 🔴 0️⃣ NEW SEARCH (RESET)
+        # -----------------------------
+        if intent == "new_search":
+            logger.info("[ChatHandler] Resetting session for new search")
+
+            return {
+                "type": "new_search",
+                "data": {"message": "Starting a new search. What are you looking for?"},
+            }
+
+        # -----------------------------
+        # 🟢 1️⃣ Budget refinement
         # -----------------------------
         if intent == "refine_budget":
             new_min = intent_data.get("budget_min")
@@ -59,12 +83,67 @@ class RecommendationChatHandler:
             if new_max is not None:
                 current_profile["budget_max"] = new_max
 
-            new_recs = self.rec_agent.recommend(current_profile)
-
-            return {"type": "recommendation_update", "data": new_recs}
+            return {
+                "type": "recommendation_update",
+                "data": self.rec_agent.recommend(current_profile),
+            }
 
         # -----------------------------
-        # 2️⃣ Brand refinement
+        # 🟡 2️⃣ Preference refinement
+        # -----------------------------
+        if intent == "refine_preferences":
+            priorities = current_profile.get("priorities", {}) or {}
+            new_prefs = intent_data.get("preferences", {})
+
+            # -------------------------
+            # Update priorities
+            # -------------------------
+            if new_prefs:
+                for k, v in new_prefs.items():
+                    priorities[k] = min(max(v, 0), 1)
+
+            current_profile["priorities"] = priorities
+
+            # -------------------------
+            # 🔥 SMART budget adjustment
+            # -------------------------
+            current_profile = adjust_budget_from_preferences(
+                current_profile, current_recommendations, new_prefs
+            )
+
+            # -------------------------
+            # Re-run recommendation
+            # -------------------------
+            new_recs = self.rec_agent.recommend(current_profile)
+
+            return {
+                "type": "recommendation_update",
+                "data": new_recs,
+            }
+
+        # -------------------------
+        # Handle "in between" / balanced requests
+        # -------------------------
+        user_text = user_message.lower()
+
+        if any(
+            word in user_text
+            for word in ["between", "balanced", "middle", "in between"]
+        ):
+            prices = [p["price"] for p in current_recommendations if p.get("price")]
+
+            if prices:
+                min_p = min(prices)
+                max_p = max(prices)
+
+                #  create mid-range window
+                new_min = min_p + (max_p - min_p) * 0.3
+                new_max = min_p + (max_p - min_p) * 0.7
+
+                current_profile["budget_min"] = new_min
+                current_profile["budget_max"] = new_max
+        # -----------------------------
+        # 🔵 3️⃣ Brand refinement
         # -----------------------------
         if intent == "refine_brand":
             brand = intent_data.get("brand")
@@ -73,11 +152,14 @@ class RecommendationChatHandler:
                 filtered = [
                     r
                     for r in current_recommendations
-                    if brand.lower() in r["title"].lower()
+                    if brand.lower() in (r.get("title") or "").lower()
                 ]
 
                 if filtered:
-                    return {"type": "recommendation_update", "data": filtered[:3]}
+                    return {
+                        "type": "recommendation_update",
+                        "data": filtered[:3],
+                    }
 
             return {
                 "type": "message",
@@ -85,168 +167,85 @@ class RecommendationChatHandler:
             }
 
         # -----------------------------
-        # 3️⃣ Explanation request
+        # 🟣 4️⃣ Explanation
         # -----------------------------
         if intent == "ask_explanation":
-            explanation = self._generate_explanation(
-                current_profile, current_recommendations
-            )
-            return {"type": "message", "data": explanation}
+            return {
+                "type": "message",
+                "data": self._generate_explanation(
+                    current_profile, current_recommendations
+                ),
+            }
 
         # -----------------------------
-        # 4️⃣ General product question
+        # ⚪ 5️⃣ General question
         # -----------------------------
         if intent == "general_question":
-            answer = self._answer_general_question(
-                user_message, current_recommendations
-            )
-            return {"type": "message", "data": answer}
+            return {
+                "type": "message",
+                "data": self._answer_general_question(
+                    user_message, current_recommendations
+                ),
+            }
 
         # -----------------------------
-        # 5️⃣ New search requested
-        # -----------------------------
-        if intent == "new_search":
-            return {"type": "new_search", "data": None}
-
-        # -----------------------------
-        # 6️⃣ Review sentiment analysis
-        # -----------------------------
-
-        if intent == "review_sentiment":
-            product = current_recommendations[0]
-
-            clean_title = extract_product_name(product["title"])
-            videos = search_youtube(clean_title + " review")
-
-            video_ids = [v["video_id"] for v in videos]
-
-            transcripts = get_transcripts_for_videos(video_ids)
-
-            sentiment = analyze_reviews(clean_title, transcripts)
-
-            return {"type": "message", "data": sentiment}
-
         # Fallback
+        # -----------------------------
         return {
             "type": "message",
-            "data": "I'm not sure how to help with that. Could you clarify?",
+            "data": "Could you clarify what you'd like to change?",
         }
 
     # ------------------------------------
-    # LLM explanation generator
+    # Explanation
     # ------------------------------------
-    def _generate_explanation(
-        self,
-        profile: Dict[str, Any],
-        recommendations: List[Dict[str, Any]],
-    ) -> str:
+    def _generate_explanation(self, profile, recommendations):
 
-        prompt = f"""
+        try:
+            prompt = f"""
 User profile:
 {profile}
 
-Recommendations:
-{recommendations}
+Top products:
+{recommendations[:3]}
 
-Explain clearly and concisely why these products match the user's needs.
+Explain briefly why these match the user.
 """
 
-        response = self.llm.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.5,
-        )
+            response = self.llm.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.5,
+            )
 
-        return response.choices[0].message.content.strip()
+            return response.choices[0].message.content.strip()
+
+        except Exception:
+            return "These products were selected based on your preferences."
 
     # ------------------------------------
-    # General Q&A handler
+    # General Q&A
     # ------------------------------------
-    def _answer_general_question(
-        self,
-        user_message: str,
-        recommendations: List[Dict[str, Any]],
-    ) -> str:
+    def _answer_general_question(self, user_message, recommendations):
 
-        prompt = f"""
-Current recommended products:
-{recommendations}
+        try:
+            prompt = f"""
+Products:
+{recommendations[:5]}
 
 User question:
 {user_message}
 
-Answer clearly using product context.
+Answer clearly.
 """
 
-        response = self.llm.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.5,
-        )
+            response = self.llm.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.5,
+            )
 
-        return response.choices[0].message.content.strip()
+            return response.choices[0].message.content.strip()
 
-    def get_product_reviews(self, product):
-
-        product_name = product.get("title")
-
-        videos = search_youtube(product_name + " review")
-
-        if not videos:
-            return "No review videos found."
-
-        video_ids = [v["video_id"] for v in videos]
-
-        transcripts = get_transcripts_for_videos(video_ids)
-
-        if not transcripts:
-            return "No transcripts available for analysis."
-
-        sentiment = analyze_reviews(product_name, transcripts)
-
-        video_links = "\n".join([f"- {v['title']} ({v['link']})" for v in videos[:3]])
-
-        return f"""
-    YouTube Community Review Analysis
-
-    Product: {product_name}
-
-    {sentiment}
-
-    Top review videos:
-    {video_links}
-    """
-
-    def compare_products(self, p1, p2):
-
-        prompt = f"""
-    Compare these two products and help the user decide.
-
-    Product 1:
-    Title: {p1.get("title")}
-    Price: {p1.get("price")}
-    Details: {p1.get("details_text")}
-
-    Product 2:
-    Title: {p2.get("title")}
-    Price: {p2.get("price")}
-    Details: {p2.get("details_text")}
-
-    Explain:
-
-    1. Performance
-    2. Build quality
-    3. Battery life (if relevant)
-    4. Value for money
-    5. Which user each product is better for
-
-    Give a clear final recommendation.
-    """
-
-        response = self.llm.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-        )
-
-        return response.choices[0].message.content.strip()
+        except Exception:
+            return "I can help compare these products if you'd like."
