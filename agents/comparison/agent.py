@@ -5,6 +5,7 @@ from tavily import TavilyClient
 import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
+import json
 
 # Load environment variables
 load_dotenv()
@@ -86,31 +87,44 @@ class ComparisonAgent:
         combined_text = combined_text[:6000]
 
         prompt = f"""
-                    You are a product comparison expert.
+You are a structured product comparison assistant.
 
-                    The user is comparing these products:
-                    {", ".join(self.products)}
-                    
-                    Context data:
-                    ----------------
-                    {combined_text}
-                    ----------------
-                    
-                    Existing comparison:
-                    ----------------
-                    {self.comparison_result}
-                    ----------------
-                    
-                    User question:
-                    {user_input}
+Products:
+{", ".join(self.products)}
 
-                    Instructions:
-                    - Answer ONLY based on these products
-                    - Be clear and helpful
-                    - If it's a comparison question, compare directly
-                    - If it's about one feature (camera, battery, etc), focus on that
-                    - Keep answer concise but informative
-                    """
+Context:
+----------------
+{combined_text}
+----------------
+
+Existing comparison:
+----------------
+{self.comparison_result}
+----------------
+
+User question:
+{user_input}
+
+Return ONLY a valid JSON.
+
+FORMAT:
+
+{{
+  "type": "feature_answer",
+  "feature": "battery / performance / camera / etc",
+  "comparison": {{
+    "product_1": "...",
+    "product_2": "..."
+  }},
+  "summary": "clear answer + short explanation"
+}}
+
+RULES:
+- No markdown
+- No extra text
+- Keep answer concise
+- Focus ONLY on what user asked
+"""
 
         response = self.client.chat.completions.create(
             model=self.model,
@@ -118,7 +132,20 @@ class ComparisonAgent:
             temperature=0.3,
         )
 
-        return response.choices[0].message.content.strip()
+        raw = response.choices[0].message.content.strip()
+        try:
+            start = raw.find("{")
+            end = raw.rfind("}") + 1
+            cleaned = raw[start:end]
+
+            return json.loads(cleaned)
+        except Exception:
+            return {
+                "type": "feature_answer",
+                "feature": "unknown",
+                "comparison": {},
+                "summary": "Could not process the answer properly",
+            }
 
     def _parse_products(self, text: str):
         """
@@ -274,37 +301,51 @@ class ComparisonAgent:
         combined_text = combined_text[:6000]
 
         prompt = f"""
-                You are a professional product comparison expert.
+You are a professional product comparison system.
 
-                Products:
-                {", ".join(self.products)}
+Products:
+{", ".join(self.products)}
 
-                Below is extracted data from multiple websites:
-                ----------------
-                {combined_text}
-                ----------------
+Data:
+----------------
+{combined_text}
+----------------
 
-                Your task:
+Return ONLY a valid JSON object.
 
-                1) Identify the MOST IMPORTANT comparison factors for these products.
-                - Choose relevant factors dynamically (e.g., performance, size, usability, features, durability, etc.)
-                - Do NOT assume fixed categories
+FORMAT:
 
-                2) Create a comparison table using ONLY the relevant factors.
+{{
+  "summary": "3-4 lines giving a quick overall comparison",
+  "comparison_table": [
+    {{
+      "feature": "...",
+      "product_1": "...",
+      "product_2": "..."
+    }}
+  ],
+  "key_differences": [
+    "...",
+    "..."
+  ],
+  "recommendation": {{
+    "product_1": [
+      "...",
+      "..."
+    ],
+    "product_2": [
+      "...",
+      "..."
+    ]
+  }}
+}}
 
-                3) Highlight key differences (max 5 points)
-
-                4) Give a final recommendation:
-                - Who should choose Product 1 (max 3 points)
-                - Who should choose Product 2 (max 3 points)
-
-                Rules:
-                - Adapt to the product type (phones, laptops, books, anything)
-                - Do NOT use fixed categories like camera or battery unless relevant
-                - Be concise and structured
-                - Do NOT repeat yourself
-                - Use ONLY the provided data
-                """
+RULES:
+- No markdown
+- No extra text
+- Keep summary concise but useful
+- Max 6 comparison rows
+"""
 
         response = self.client.chat.completions.create(
             model=self.model,
@@ -312,7 +353,20 @@ class ComparisonAgent:
             temperature=0.3,
         )
 
-        return response.choices[0].message.content.strip()
+        raw = response.choices[0].message.content.strip()
+        try:
+            start = raw.find("{")
+            end = raw.rfind("}") + 1
+            cleaned = raw[start:end]
+
+            return json.loads(cleaned)
+        except Exception:
+            return {
+                "summary": "Could not generate summary",
+                "comparison_table": [],
+                "key_differences": ["Failed to parse comparison"],
+                "recommendation": {},
+            }
 
     def filter_links(self, links: list):
         """
@@ -345,8 +399,15 @@ class ComparisonAgent:
 
         result = self.generate_comparison(contents)
 
-        # 🔥 STORE HERE (correct place)
+        # attach sources
+        sources = [{"url": link} for link in links]
+
+        # store
         self.raw_contents = contents
         self.comparison_result = result
+
+        # merge sources into result
+        if isinstance(result, dict):
+            result["sources"] = sources
 
         return result

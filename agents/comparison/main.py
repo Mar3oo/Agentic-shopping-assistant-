@@ -1,4 +1,4 @@
-from agent import ComparisonAgent
+from agents.comparison.agent import ComparisonAgent
 
 
 def run_chat():
