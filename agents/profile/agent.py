@@ -4,8 +4,8 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.output_parsers import PydanticOutputParser
 
-from .prompts import SYSTEM_PROMPT
-from .schemas import ProfileAgentOutput, UserProfile
+from agents.profile.prompts import SYSTEM_PROMPT
+from agents.profile.schemas import ProfileAgentOutput, UserProfile
 
 # Load environment variables
 load_dotenv()

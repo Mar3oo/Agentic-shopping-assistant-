@@ -1,12 +1,10 @@
-"""
-LLM Intent Router for Recommendation Mode.
-Uses Groq to classify user intent into structured JSON.
-"""
-
 import json
+import logging
 from typing import Dict, Any
 from groq import Groq
 from agents.recommendation.prompts import system_prompt
+
+logger = logging.getLogger(__name__)
 
 
 class RecommendationIntentRouter:
@@ -29,14 +27,20 @@ class RecommendationIntentRouter:
             "intent": "...",
             "budget_min": float | null,
             "budget_max": float | null,
-            "brand": str | null
+            "brand": str | null,
+            "preferences": {...}
         }
         """
 
         SYSTEM_PROMPT = system_prompt.strip()
 
+        # -------------------------
+        # Limit recommendations to avoid long prompts
+        # -------------------------
+        limited_recs = current_recommendations[:5]
+
         recommendations_text = "\n".join(
-            [f"- {r['title']} ({r['price']})" for r in current_recommendations]
+            [f"- {r.get('title')} ({r.get('price')})" for r in limited_recs]
         )
 
         user_prompt = f"""
@@ -45,33 +49,51 @@ Current recommendations:
 
 User message:
 {user_message}
+
+Return ONLY a valid JSON object.
 """
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0,
-        )
-
-        content = response.choices[0].message.content.strip()
-
-        # try extracting JSON from text
-        start = content.find("{")
-        end = content.rfind("}") + 1
-
-        if start != -1 and end != -1:
-            content = content[start:end]
-
         try:
-            return json.loads(content)
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0,
+            )
 
-        except json.JSONDecodeError:
+            content = response.choices[0].message.content.strip()
+
+            # -------------------------
+            # Extract JSON safely
+            # -------------------------
+            start = content.find("{")
+            end = content.rfind("}") + 1
+
+            if start != -1 and end != -1:
+                content = content[start:end]
+
+            parsed = json.loads(content)
+
+            # -------------------------
+            # Ensure required keys exist
+            # -------------------------
+            return {
+                "intent": parsed.get("intent", "general_question"),
+                "budget_min": parsed.get("budget_min"),
+                "budget_max": parsed.get("budget_max"),
+                "brand": parsed.get("brand"),
+                "preferences": parsed.get("preferences", {}),
+            }
+
+        except Exception as e:
+            logger.error(f"[IntentRouter] Failed: {e}")
+
             return {
                 "intent": "general_question",
                 "budget_min": None,
                 "budget_max": None,
                 "brand": None,
+                "preferences": {},
             }

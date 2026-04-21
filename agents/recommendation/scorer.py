@@ -1,39 +1,20 @@
-"""
-Hybrid scoring engine:
-Combines semantic similarity + structured signals.
-"""
-
 from typing import List, Dict, Any
 import numpy as np
-from Data_base.feedback_repo import get_user_feedback
 
 
 class ProductScorer:
     """
-    Scores products using:
-    - Semantic similarity (primary)
-    - Price proximity
-    - Seller score
+    Clean scoring engine:
+    - Semantic similarity
+    - Price alignment
+    - Adaptive budget penalty
+    - Priority-aware weighting
     """
 
-    def __init__(
-        self,
-        user_id: str,
-        semantic_weight: float = 0.7,
-        price_weight: float = 0.2,
-        seller_weight: float = 0.1,
-    ):
+    def __init__(self, user_id: str):
         self.user_id = user_id
-        self.semantic_weight = semantic_weight
-        self.price_weight = price_weight
-        self.seller_weight = seller_weight
 
     def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
-        """
-        Cosine similarity for normalized vectors.
-        Since embeddings are normalized,
-        dot product = cosine similarity.
-        """
         return float(np.dot(a, b))
 
     def _price_score(
@@ -42,46 +23,62 @@ class ProductScorer:
         user_min: float | None,
         user_max: float | None,
     ) -> float:
-        """
-        Score how close price is to middle of user's range.
-        Returns value between 0 and 1.
-        """
 
         if product_price is None:
             return 0.0
 
-        if user_min is None and user_max is None:
-            return 0.5  # neutral
+        if user_max is None or user_max <= 0:
+            return 0.5
 
-        # Define bounds safely
-        lower = user_min if user_min is not None else product_price
-        upper = user_max if user_max is not None else product_price
+        # 🔥 prefer prices closer to upper budget (better quality)
+        ratio = product_price / user_max
 
-        if lower == upper:
-            return 1.0
+        if ratio <= 1:
+            # within budget → higher is better
+            return 0.5 + 0.5 * ratio  # range: 0.5 → 1.0
 
-        mid = (lower + upper) / 2
-        distance = abs(product_price - mid)
+        else:
+            # above budget → decrease score
+            return max(0.0, 1 - (ratio - 1))
 
-        max_distance = (upper - lower) / 2
-        if max_distance == 0:
-            return 1.0
-
-        score = 1 - (distance / max_distance)
-
-        return max(0.0, min(1.0, score))
-
-    def _seller_score(self, seller_score: float | None) -> float:
+    def _budget_penalty(
+        self,
+        price: float,
+        budget_max: float | None,
+        priorities: Dict[str, float] | None,
+    ) -> float:
         """
-        Normalize seller score into 0-1.
-        If missing → treat as 0.
-        Assumes seller_score roughly between 0-5.
+        Penalize products above budget with adaptive tolerance.
         """
 
-        if seller_score is None:
+        if not budget_max or not price:
             return 0.0
 
-        return max(0.0, min(1.0, seller_score / 5))
+        performance_priority = (priorities or {}).get("performance", 0)
+        price_priority = (priorities or {}).get("price", 0)
+
+        # 🔥 Dynamic tolerance
+        base_tolerance = 0.15  # 15%
+
+        if performance_priority > 0.7:
+            base_tolerance += 0.15  # allow more expensive if performance matters
+
+        if price_priority > 0.7:
+            base_tolerance -= 0.05  # stricter if price matters
+
+        max_allowed = budget_max * (1 + base_tolerance)
+
+        if price <= budget_max:
+            return 0.0
+
+        elif price <= max_allowed:
+            # mild penalty
+            overflow_ratio = (price - budget_max) / (max_allowed - budget_max)
+            return -0.2 * overflow_ratio
+
+        else:
+            # strong penalty
+            return -0.8
 
     def rank_products(
         self,
@@ -89,15 +86,11 @@ class ProductScorer:
         user_embedding: np.ndarray,
         user_price_min: float | None = None,
         user_price_max: float | None = None,
-        top_k: int = 3,
+        priorities: Dict[str, float] | None = None,
+        top_k: int = 50,
     ) -> List[Dict[str, Any]]:
-        """
-        Rank products and return top_k.
-        """
 
         scored = []
-        feedback = get_user_feedback(self.user_id)
-        liked_links = {f["product_link"] for f in feedback if f["liked"]}
 
         for item in products:
             product = item["product"]
@@ -105,35 +98,54 @@ class ProductScorer:
             embedding = np.array(product["embedding"])
             semantic_sim = self._cosine_similarity(user_embedding, embedding)
 
+            price = product.get("price")
+
             price_score = self._price_score(
-                product.get("price"),
+                price,
                 user_price_min,
                 user_price_max,
             )
 
-            seller_score = self._seller_score(product.get("seller_score"))
+            # -------------------------
+            # 🔥 Adaptive weights
+            # -------------------------
+            semantic_w = 0.6
+            price_w = 0.4
 
-            feedback_boost = 0
+            if priorities:
+                perf = priorities.get("performance", 0)
+                price_p = priorities.get("price", 0)
 
-            if product.get("link") in liked_links:
-                feedback_boost = 0.1
+                if perf > 0.7:
+                    semantic_w = 0.75
+                    price_w = 0.25
 
-            final_score = (
-                semantic_sim * self.semantic_weight
-                + price_score * self.price_weight
-                + seller_score * self.seller_weight
-                + feedback_boost
+                elif price_p > 0.7:
+                    semantic_w = 0.4
+                    price_w = 0.6
+
+            # -------------------------
+            # 🔥 Budget penalty
+            # -------------------------
+            penalty = self._budget_penalty(
+                price,
+                user_price_max,
+                priorities,
             )
+
+            # -------------------------
+            # Final score
+            # -------------------------
+            final_score = semantic_sim * semantic_w + price_score * price_w + penalty
 
             scored.append(
                 {
                     "title": product.get("title"),
-                    "price": product.get("price"),
+                    "price": price,
                     "link": product.get("link"),
                     "category": product.get("category"),
                     "semantic_score": semantic_sim,
                     "price_score": price_score,
-                    "seller_score": seller_score,
                     "final_score": final_score,
                 }
             )

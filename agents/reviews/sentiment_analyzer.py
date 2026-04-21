@@ -11,23 +11,39 @@ MODEL = "llama-3.3-70b-versatile"
 
 def analyze_reviews(product_name, transcripts):
 
-    combined = " ".join(transcripts[:3])[:8000]
+    combined = " ".join(transcripts[:2])[:6000]
 
     prompt = f"""
-Analyze community sentiment about this product based on YouTube review transcripts.
+            You are an expert product review analyst.
 
-Product: {product_name}
+            Product:
+            {product_name}
 
-Transcript excerpts:
-{combined}
+            Review data:
+            ----------------
+            {combined}
+            ----------------
 
-Return:
+            Return TWO sections:
 
-1. overall sentiment score (0-100)
-2. main pros
-3. main cons
-4. short summary
-"""
+            === QUICK SUMMARY ===
+            - Overall verdict (1–2 lines)
+            - Sentiment score
+            - Top 3 pros
+            - Top 2 cons
+            - Value for money (1 line)
+
+            === DETAILED ANALYSIS ===
+            1) PROS (full)
+            2) CONS (full)
+            3) KEY INSIGHTS
+            4) WHO IS THIS FOR
+
+            Rules:
+            - Do NOT repeat information between sections
+            - Keep quick summary very concise
+            - Use ONLY the provided data
+            """
 
     response = client.chat.completions.create(
         model=MODEL, messages=[{"role": "user", "content": prompt}], temperature=0.3
