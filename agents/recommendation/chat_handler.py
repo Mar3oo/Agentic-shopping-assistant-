@@ -53,7 +53,9 @@ class RecommendationChatHandler:
         user_message: str,
         current_profile: Dict[str, Any],
         current_recommendations: List[Dict[str, Any]],
+        conversation_history: List[Dict[str, str]] | None = None,
     ) -> Dict[str, Any]:
+        conversation_history = conversation_history or []
 
         intent_data = self.router.route(user_message, current_recommendations)
         intent = intent_data.get("intent")
@@ -86,6 +88,7 @@ class RecommendationChatHandler:
             return {
                 "type": "recommendation_update",
                 "data": self.rec_agent.recommend(current_profile),
+                "profile": current_profile,
             }
 
         # -----------------------------
@@ -119,6 +122,7 @@ class RecommendationChatHandler:
             return {
                 "type": "recommendation_update",
                 "data": new_recs,
+                "profile": current_profile,
             }
 
         # -------------------------
@@ -159,6 +163,7 @@ class RecommendationChatHandler:
                     return {
                         "type": "recommendation_update",
                         "data": filtered[:3],
+                        "profile": current_profile,
                     }
 
             return {
@@ -173,7 +178,7 @@ class RecommendationChatHandler:
             return {
                 "type": "message",
                 "data": self._generate_explanation(
-                    current_profile, current_recommendations
+                    current_profile, current_recommendations, conversation_history
                 ),
             }
 
@@ -184,7 +189,7 @@ class RecommendationChatHandler:
             return {
                 "type": "message",
                 "data": self._answer_general_question(
-                    user_message, current_recommendations
+                    user_message, current_recommendations, conversation_history
                 ),
             }
 
@@ -199,12 +204,18 @@ class RecommendationChatHandler:
     # ------------------------------------
     # Explanation
     # ------------------------------------
-    def _generate_explanation(self, profile, recommendations):
+    def _generate_explanation(self, profile, recommendations, conversation_history):
+        history_block = "\n".join(
+            f"{item['role']}: {item['content']}" for item in conversation_history[-6:]
+        )
 
         try:
             prompt = f"""
 User profile:
 {profile}
+
+Recent conversation:
+{history_block}
 
 Top products:
 {recommendations[:3]}
@@ -226,12 +237,20 @@ Explain briefly why these match the user.
     # ------------------------------------
     # General Q&A
     # ------------------------------------
-    def _answer_general_question(self, user_message, recommendations):
+    def _answer_general_question(
+        self, user_message, recommendations, conversation_history
+    ):
+        history_block = "\n".join(
+            f"{item['role']}: {item['content']}" for item in conversation_history[-6:]
+        )
 
         try:
             prompt = f"""
 Products:
 {recommendations[:5]}
+
+Recent conversation:
+{history_block}
 
 User question:
 {user_message}

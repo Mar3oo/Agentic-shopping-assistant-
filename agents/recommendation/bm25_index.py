@@ -1,6 +1,6 @@
 import logging
 from rank_bm25 import BM25Okapi
-from Data_base.db import get_collection
+from Data_Base.db import get_collection
 
 logger = logging.getLogger(__name__)
 

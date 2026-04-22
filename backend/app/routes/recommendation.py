@@ -15,4 +15,8 @@ def start(request: StartRequest):
 
 @router.post("/chat")
 def chat(request: ChatRequest):
-    return chat_recommendation(user_id=request.user_id, message=request.message)
+    return chat_recommendation(
+        user_id=request.user_id,
+        message=request.message,
+        session_id=request.session_id,
+    )

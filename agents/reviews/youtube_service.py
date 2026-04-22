@@ -2,8 +2,7 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from googleapiclient.discovery import build
 import os
 from dotenv import load_dotenv
-import re
-from groq import Groq
+from agents.shared.product_name_extractor import extract_clean_product_name
 
 load_dotenv()
 
@@ -11,39 +10,10 @@ API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 youtube = build("youtube", "v3", developerKey=API_KEY)
 
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-MODEL = "llama-3.3-70b-versatile"
-
 
 def llm_extract_product_name(title: str):
-    """
-    Use LLM to extract clean product name.
-    """
-
-    prompt = f"""
-            Extract the core product name from this e-commerce title.
-
-            Rules:
-            - Keep brand + model
-            - Remove specs, storage, color, marketing text
-            - Return ONLY the product name
-
-            Example:
-            Input:
-            Apple MacBook Air MRXQ3 | 13 Inch Display | Apple M3 Chip | 8GB RAM
-
-            Output:
-            Apple MacBook Air MRXQ3
-
-            Title:
-            {title}
-            """
-
-    response = groq_client.chat.completions.create(
-        model=MODEL, messages=[{"role": "user", "content": prompt}], temperature=0
-    )
-
-    return response.choices[0].message.content.strip()
+    """Backward-compatible wrapper around the shared LLM cleaner."""
+    return extract_clean_product_name(title)
 
 
 def search_youtube(query, max_results=5):

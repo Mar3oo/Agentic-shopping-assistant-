@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 import logging
 
-from Data_base.db import get_collection
+from Data_Base.db import get_collection
 from agents.recommendation.vector_index import ProductVectorIndex
 
 logger = logging.getLogger(__name__)

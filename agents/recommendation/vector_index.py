@@ -2,7 +2,7 @@ import logging
 
 import faiss
 import numpy as np
-from Data_base.db import get_collection
+from Data_Base.db import get_collection
 
 logger = logging.getLogger(__name__)
 
