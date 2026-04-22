@@ -13,12 +13,13 @@ from config import APP_TITLE
 from services.api_client import ApiClientError, chat_comparison, start_comparison
 from services.session_state import (
     append_chat_message,
+    activate_session,
     ensure_authenticated,
     get_session_id,
     initialize_session_state,
     render_sidebar,
     reset_agent_state,
-    set_session_id,
+    set_agent_messages,
 )
 
 
@@ -54,12 +55,15 @@ if start_clicked:
                 st.error(response.get("message", "Comparison request failed."))
             else:
                 reset_agent_state("comparison")
-                set_session_id("comparison", response.get("session_id"))
+                activate_session("comparison", response.get("session_id"))
                 st.session_state.comparison_result = response.get("data")
-                st.session_state.comparison_messages = [
-                    {"role": "user", "content": comparison_query},
-                    {"role": "assistant", "content": response.get("message", "Comparison response"), "payload": response},
-                ]
+                set_agent_messages(
+                    "comparison",
+                    [
+                        {"role": "user", "content": comparison_query},
+                        {"role": "assistant", "content": response.get("message", "Comparison response"), "payload": response},
+                    ],
+                )
                 st.rerun()
         except ApiClientError as exc:
             st.error(str(exc))
@@ -91,10 +95,11 @@ if comparison_chat_message:
             )
             if response.get("status") != "success":
                 st.session_state.comparison_messages.pop()
+                set_agent_messages("comparison", st.session_state.comparison_messages)
                 st.error(response.get("message", "Comparison chat failed."))
             else:
                 if response.get("session_id"):
-                    set_session_id("comparison", response["session_id"])
+                    activate_session("comparison", response["session_id"])
                 st.session_state.comparison_result = response.get("data")
                 append_chat_message(
                     "comparison",
@@ -105,4 +110,5 @@ if comparison_chat_message:
                 st.rerun()
         except ApiClientError as exc:
             st.session_state.comparison_messages.pop()
+            set_agent_messages("comparison", st.session_state.comparison_messages)
             st.error(str(exc))

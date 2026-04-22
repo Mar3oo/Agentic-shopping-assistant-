@@ -21,6 +21,7 @@ from services.api_client import (
 )
 from services.session_state import (
     append_chat_message,
+    activate_session,
     ensure_authenticated,
     get_session_id,
     initialize_session_state,
@@ -42,7 +43,7 @@ def _apply_recommendation_response(prompt: str, response: dict, *, reset_message
 
     session_id = response.get("session_id")
     if session_id:
-        set_session_id("recommendation", session_id)
+        activate_session("recommendation", session_id)
 
     append_chat_message("recommendation", "user", prompt)
     append_chat_message("recommendation", "assistant", response.get("message", "Recommendation response"), response)
@@ -88,6 +89,34 @@ def _apply_review_response(prompt: str, response: dict) -> None:
 
 def _product_titles(products: list[dict]) -> list[str]:
     return [product.get("title") for product in products if product.get("title")]
+
+
+def extract_short_name(title: str) -> str:
+    cleaned_title = (title or "").strip()
+    if not cleaned_title:
+        return ""
+
+    for separator in ("|", " - ", " -", "- "):
+        if separator in cleaned_title:
+            cleaned_title = cleaned_title.split(separator, 1)[0].strip()
+            break
+
+    words = []
+    for raw_word in cleaned_title.replace("/", " ").split():
+        word = raw_word.strip(" ,.;:()[]{}")
+        if not word:
+            continue
+        if "-" in word and any(char.isdigit() for char in word):
+            word = word.split("-", 1)[0]
+        words.append(word)
+        if len(words) == 5:
+            break
+
+    generic_suffixes = {"laptop", "notebook", "computer", "pc"}
+    while len(words) > 3 and words[-1].lower() in generic_suffixes:
+        words.pop()
+
+    return " ".join(words) or cleaned_title
 
 
 st.title("Recommendation")
@@ -139,12 +168,40 @@ if products:
     compare_col, review_col = st.columns(2)
 
     with compare_col:
-        compare_disabled = len(products) < 2
-        if compare_disabled:
+        compare_options = _product_titles(products)
+        has_enough_products = len(compare_options) >= 2
+        if not has_enough_products:
             st.info("At least two products are needed for inline comparison.")
-        if st.button("Compare these products", disabled=compare_disabled, use_container_width=True):
-            product_titles = _product_titles(products[:2])
-            query = f"{product_titles[0]} vs {product_titles[1]}"
+
+        selected_compare_products = st.multiselect(
+            "Select 2 products to compare",
+            options=compare_options,
+            key="recommendation_compare_multiselect",
+            disabled=not has_enough_products,
+        )
+
+        selected_count = len(selected_compare_products)
+        if has_enough_products:
+            if selected_count < 2:
+                st.warning("Select exactly 2 products to compare.")
+            elif selected_count > 2:
+                st.warning("Select only 2 products to compare.")
+
+        if selected_compare_products:
+            st.write("You selected:")
+            for selected_product in selected_compare_products:
+                st.write(selected_product)
+
+        can_compare_selected = has_enough_products and selected_count == 2
+        if st.button(
+            "Compare selected products",
+            disabled=not can_compare_selected,
+            use_container_width=True,
+        ):
+            product1, product2 = selected_compare_products
+            short1 = extract_short_name(product1)
+            short2 = extract_short_name(product2)
+            query = f"compare {short1} vs {short2}"
             try:
                 response = start_comparison(
                     user_id=st.session_state.user_id,

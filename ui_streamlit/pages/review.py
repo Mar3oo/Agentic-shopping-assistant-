@@ -13,12 +13,13 @@ from config import APP_TITLE
 from services.api_client import ApiClientError, chat_review, start_review
 from services.session_state import (
     append_chat_message,
+    activate_session,
     ensure_authenticated,
     get_session_id,
     initialize_session_state,
     render_sidebar,
     reset_agent_state,
-    set_session_id,
+    set_agent_messages,
 )
 
 
@@ -54,12 +55,15 @@ if start_clicked:
                 st.error(response.get("message", "Review request failed."))
             else:
                 reset_agent_state("review")
-                set_session_id("review", response.get("session_id"))
+                activate_session("review", response.get("session_id"))
                 st.session_state.review_result = response.get("data")
-                st.session_state.review_messages = [
-                    {"role": "user", "content": review_query},
-                    {"role": "assistant", "content": response.get("message", "Review response"), "payload": response},
-                ]
+                set_agent_messages(
+                    "review",
+                    [
+                        {"role": "user", "content": review_query},
+                        {"role": "assistant", "content": response.get("message", "Review response"), "payload": response},
+                    ],
+                )
                 st.rerun()
         except ApiClientError as exc:
             st.error(str(exc))
@@ -91,10 +95,11 @@ if review_chat_message:
             )
             if response.get("status") != "success":
                 st.session_state.review_messages.pop()
+                set_agent_messages("review", st.session_state.review_messages)
                 st.error(response.get("message", "Review chat failed."))
             else:
                 if response.get("session_id"):
-                    set_session_id("review", response["session_id"])
+                    activate_session("review", response["session_id"])
                 st.session_state.review_result = response.get("data")
                 append_chat_message(
                     "review",
@@ -105,4 +110,5 @@ if review_chat_message:
                 st.rerun()
         except ApiClientError as exc:
             st.session_state.review_messages.pop()
+            set_agent_messages("review", st.session_state.review_messages)
             st.error(str(exc))
