@@ -1,5 +1,6 @@
 from agents.reviews.youtube_service import search_youtube, get_transcripts_for_videos
 from agents.reviews.sentiment_analyzer import analyze_reviews
+from agents.shared.product_name_extractor import extract_clean_product_name
 from groq import Groq
 import os
 from dotenv import load_dotenv
@@ -10,12 +11,40 @@ load_dotenv()
 class ReviewAgent:
     def __init__(self):
         self.product = None
+        self.query = None
+        self.sources = []
         self.reviews_data = None
 
         self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
         self.model = "llama-3.3-70b-versatile"
 
+    def to_state(self) -> dict:
+        return {
+            "product": self.product,
+            "query": self.query,
+            "sources": self.sources,
+            "reviews_data": self.reviews_data,
+        }
+
+    @classmethod
+    def from_state(cls, state: dict | None):
+        agent = cls()
+        state = state or {}
+        agent.product = state.get("product")
+        agent.query = state.get("query")
+        agent.sources = state.get("sources") or []
+        agent.reviews_data = state.get("reviews_data")
+        return agent
+
     def handle_message(self, user_input: str):
+        normalized = " ".join(user_input.lower().strip().split())
+
+        if normalized == "new_review":
+            self.product = None
+            self.query = None
+            self.sources = []
+            self.reviews_data = None
+            return "Ready for a new review search. Please enter a product."
 
         if self._is_new_review(user_input):
             return self.start_review(user_input)
@@ -26,8 +55,17 @@ class ReviewAgent:
         return self.answer_followup(user_input)
 
     def _is_new_review(self, text: str):
-        text = text.lower()
-        return "review" in text or "reviews" in text
+        normalized = " ".join(text.lower().strip().split())
+        return (
+            normalized.startswith("review ")
+            or normalized.startswith("reviews for ")
+            or normalized.startswith("review of ")
+            or normalized.startswith("show reviews for ")
+            or normalized.startswith("get reviews for ")
+            or normalized.startswith("find reviews for ")
+            or normalized.endswith(" review")
+            or normalized.endswith(" reviews")
+        )
 
     def start_review(self, user_input: str):
 
@@ -36,18 +74,34 @@ class ReviewAgent:
         if not product:
             return "Please specify a product."
 
-        self.product = product
+        self.product = extract_clean_product_name(product)
 
         return self.run_review_pipeline()
 
     def _parse_product(self, text: str):
-        text = text.lower()
+        normalized = " ".join((text or "").strip().split())
+        lowered = normalized.lower()
+        prefixes = (
+            "reviews for ",
+            "review of ",
+            "show reviews for ",
+            "get reviews for ",
+            "find reviews for ",
+            "review ",
+        )
 
-        text = text.replace("reviews for", "")
-        text = text.replace("review", "")
-        text = text.replace("reviews", "")
+        for prefix in prefixes:
+            if lowered.startswith(prefix):
+                normalized = normalized[len(prefix) :]
+                break
 
-        return text.strip()
+        lowered = normalized.lower()
+        if lowered.endswith(" reviews"):
+            normalized = normalized[: -len(" reviews")]
+        elif lowered.endswith(" review"):
+            normalized = normalized[: -len(" review")]
+
+        return normalized.strip(" .,!?")
 
     def run_review_pipeline(self):
         """
@@ -83,6 +137,8 @@ class ReviewAgent:
             result["sources"] = sources
 
         # store
+        self.query = query
+        self.sources = sources
         self.reviews_data = result
 
         return result
