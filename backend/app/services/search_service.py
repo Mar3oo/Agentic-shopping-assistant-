@@ -16,6 +16,10 @@ _DEFAULT_SEARCH_LIMIT = 10
 _DEFAULT_TOP_K = 5
 
 
+def _t(language: str, en: str, ar: str) -> str:
+    return ar if language == "ar" else en
+
+
 def _normalize_query(query: str) -> str:
     return " ".join((query or "").strip().lower().split())
 
@@ -48,16 +52,22 @@ def _persist_search_artifacts(user_id: str, query: str, products: list[dict]) ->
     insert_search_history(user_id=user_id, query=query, results_count=len(products))
 
 
-def _success_response(products: list[dict]) -> dict:
+def _success_response(products: list[dict], language: str) -> dict:
     return {
         "status": "success",
         "type": "search",
-        "message": "Here are live search results",
+        "message": _t(
+            language, "Here are live search results", "إليك نتائج البحث المباشرة"
+        ),
         "data": {"products": products},
     }
 
 
-def run_search(user_id: str, message: str) -> dict:
+def run_search(
+    user_id: str,
+    message: str,
+    language: str = "en",
+) -> dict:
     enforce_rate_limit(user_id, "search", limit=20, window_seconds=60)
     ensure_user(user_id)
 
@@ -66,8 +76,10 @@ def run_search(user_id: str, message: str) -> dict:
     cached_products = _get_cached_products(normalized_query)
 
     if cached_products is not None:
-        _persist_search_artifacts(user_id=user_id, query=query, products=cached_products)
-        return _success_response(cached_products)
+        _persist_search_artifacts(
+            user_id=user_id, query=query, products=cached_products
+        )
+        return _success_response(cached_products, language)
 
     try:
         products = pipeline.run(
@@ -77,6 +89,15 @@ def run_search(user_id: str, message: str) -> dict:
         )
         _set_cached_products(normalized_query, products)
         _persist_search_artifacts(user_id=user_id, query=query, products=products)
-        return _success_response(products)
+        return _success_response(products, language)
     except Exception as e:
-        return {"status": "error", "type": "search", "message": str(e), "data": {}}
+        return {
+            "status": "error",
+            "type": "search",
+            "message": _t(
+                language,
+                str(e),
+                f"حدث خطأ أثناء البحث: {str(e)}",
+            ),
+            "data": {},
+        }

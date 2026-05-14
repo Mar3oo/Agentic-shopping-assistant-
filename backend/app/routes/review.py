@@ -8,7 +8,11 @@ router = APIRouter(prefix="/review", tags=["Review"])
 
 @router.post("/start")
 def start(request: ReviewStartRequest):
-    return start_review(user_id=request.user_id, message=request.message)
+    return start_review(
+        user_id=request.user_id,
+        message=request.message,
+        language=request.language,
+    )
 
 
 @router.post("/chat")
@@ -17,4 +21,5 @@ def chat(request: ReviewChatRequest):
         user_id=request.user_id,
         session_id=request.session_id,
         message=request.message,
+        language=request.language,
     )

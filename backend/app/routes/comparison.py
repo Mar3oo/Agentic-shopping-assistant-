@@ -11,7 +11,11 @@ router = APIRouter(prefix="/comparison", tags=["Comparison"])
 
 @router.post("/start")
 def start(request: ComparisonStartRequest):
-    return start_comparison(user_id=request.user_id, message=request.message)
+    return start_comparison(
+        user_id=request.user_id,
+        message=request.message,
+        language=request.language,
+    )
 
 
 @router.post("/chat")
@@ -20,4 +24,5 @@ def chat(request: ComparisonChatRequest):
         user_id=request.user_id,
         message=request.message,
         session_id=request.session_id,
+        language=request.language,
     )

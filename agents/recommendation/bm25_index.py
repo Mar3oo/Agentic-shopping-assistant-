@@ -1,6 +1,7 @@
 import logging
 from rank_bm25 import BM25Okapi
 from Data_Base.db import get_collection
+from agents.shared.text_normalization import normalize_text
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,8 @@ class BM25Index:
 
             text = f"{title} {details} {category}".lower()
 
-            tokens = text.split()
+            normalized = normalize_text(text)
+            tokens = normalized.split()
 
             if not tokens:
                 continue
@@ -107,7 +109,8 @@ class BM25Index:
             logger.warning("[BM25] Empty query")
             return []
 
-        tokens = query_text.lower().split()
+        normalized = normalize_text(query_text)
+        tokens = normalized.split()
 
         scores = self.bm25.get_scores(tokens)
 

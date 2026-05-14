@@ -48,12 +48,26 @@ class RecommendationChatHandler:
         self.llm = Groq(api_key=os.getenv("GROQ_API_KEY"))
         self.model = "llama-3.3-70b-versatile"
 
+    def _language_instruction(self, language: str) -> str:
+        """
+        Returns response language instruction for the LLM.
+        """
+
+        if language == "ar":
+            return (
+                "Respond entirely in Arabic. "
+                "Keep product names and technical specifications in English when appropriate."
+            )
+
+        return "Respond entirely in English."
+
     def handle(
         self,
         user_message: str,
         current_profile: Dict[str, Any],
         current_recommendations: List[Dict[str, Any]],
-        conversation_history: List[Dict[str, str]] | None = None,
+        language: str = "en",
+        conversation_history: List[Dict[str, Any]] | None = None,
     ) -> Dict[str, Any]:
         conversation_history = conversation_history or []
 
@@ -168,7 +182,11 @@ class RecommendationChatHandler:
 
             return {
                 "type": "message",
-                "data": "No products found for that brand in current results.",
+                "data": (
+                    "لم يتم العثور على منتجات من هذه العلامة التجارية ضمن النتائج الحالية."
+                    if language == "ar"
+                    else "No products found for that brand in current results."
+                ),
             }
 
         # -----------------------------
@@ -178,7 +196,10 @@ class RecommendationChatHandler:
             return {
                 "type": "message",
                 "data": self._generate_explanation(
-                    current_profile, current_recommendations, conversation_history
+                    current_profile,
+                    current_recommendations,
+                    conversation_history,
+                    language,
                 ),
             }
 
@@ -189,7 +210,10 @@ class RecommendationChatHandler:
             return {
                 "type": "message",
                 "data": self._answer_general_question(
-                    user_message, current_recommendations, conversation_history
+                    user_message,
+                    current_recommendations,
+                    conversation_history,
+                    language,
                 ),
             }
 
@@ -198,19 +222,27 @@ class RecommendationChatHandler:
         # -----------------------------
         return {
             "type": "message",
-            "data": "Could you clarify what you'd like to change?",
+            "data": (
+                "لم أفهم طلبك بشكل كافٍ، هل يمكنك التوضيح أكثر؟"
+                if language == "ar"
+                else "I'm not sure how to help with that. Could you clarify?"
+            ),
         }
 
     # ------------------------------------
     # Explanation
     # ------------------------------------
-    def _generate_explanation(self, profile, recommendations, conversation_history):
+    def _generate_explanation(
+        self, profile, recommendations, conversation_history, language="en"
+    ):
         history_block = "\n".join(
             f"{item['role']}: {item['content']}" for item in conversation_history[-6:]
         )
 
         try:
             prompt = f"""
+{self._language_instruction(language)}            
+
 User profile:
 {profile}
 
@@ -238,7 +270,7 @@ Explain briefly why these match the user.
     # General Q&A
     # ------------------------------------
     def _answer_general_question(
-        self, user_message, recommendations, conversation_history
+        self, user_message, recommendations, conversation_history, language="en"
     ):
         history_block = "\n".join(
             f"{item['role']}: {item['content']}" for item in conversation_history[-6:]
@@ -246,6 +278,8 @@ Explain briefly why these match the user.
 
         try:
             prompt = f"""
+{self._language_instruction(language)}            
+            
 Products:
 {recommendations[:5]}
 

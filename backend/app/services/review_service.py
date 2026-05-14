@@ -1,6 +1,11 @@
+from email.mime import message
+
 from agents.reviews.agent import ReviewAgent
 
-from backend.app.services.cache_service import load_cached_response, store_cached_response
+from backend.app.services.cache_service import (
+    load_cached_response,
+    store_cached_response,
+)
 from backend.app.services.rate_limit_service import enforce_rate_limit
 from backend.app.services.session_service import (
     append_assistant_message,
@@ -10,6 +15,10 @@ from backend.app.services.session_service import (
     open_session,
     persist_session_state,
 )
+
+
+def _t(language: str, en: str, ar: str) -> str:
+    return ar if language == "ar" else en
 
 
 def _assistant_summary(result) -> str:
@@ -70,6 +79,7 @@ def _open_empty_review_session(user_id: str, message: str) -> dict:
 def _start_review_session(
     user_id: str,
     message: str,
+    language: str = "en",
     enforce_limit_guard: bool = True,
 ) -> dict:
     if enforce_limit_guard:
@@ -88,7 +98,10 @@ def _start_review_session(
             agent_state = cached["agent_state"]
         else:
             agent = ReviewAgent()
-            result = agent.start_review(message)
+            result = agent.start_review(
+                message,
+                language=language,
+            )
             agent_state = agent.to_state()
             if isinstance(result, dict) and agent_state.get("product"):
                 store_cached_response(
@@ -117,7 +130,11 @@ def _start_review_session(
         return {
             "status": "success",
             "type": "review",
-            "message": "Here are the reviews",
+            "message": _t(
+                language,
+                "Here are the reviews",
+                "هذه مراجعات المنتج",
+            ),
             "session_id": session_id,
             "data": result,
         }
@@ -139,17 +156,30 @@ def _start_review_session(
         return {
             "status": "error",
             "type": "review",
-            "message": str(exc),
+            "message": _t(
+                language,
+                str(exc),
+                f"حدث خطأ أثناء تحليل المراجعات: {str(exc)}",
+            ),
             "session_id": session_id,
             "data": {},
         }
 
 
-def start_review(user_id: str, message: str) -> dict:
+def start_review(
+    user_id: str,
+    message: str,
+    language: str = "en",
+) -> dict:
     return _start_review_session(user_id, message, enforce_limit_guard=True)
 
 
-def chat_review(user_id: str, session_id: str, message: str) -> dict:
+def chat_review(
+    user_id: str,
+    session_id: str,
+    message: str,
+    language: str = "en",
+) -> dict:
     enforce_rate_limit(user_id, "review_chat", limit=12, window_seconds=60)
 
     session = load_session(
@@ -162,7 +192,11 @@ def chat_review(user_id: str, session_id: str, message: str) -> dict:
         return {
             "status": "error",
             "type": "review",
-            "message": "Start review first",
+            "message": _t(
+                language,
+                "Start review first",
+                "ابدأ البحث عن المراجعات أولاً",
+            ),
             "data": {},
         }
 
@@ -178,6 +212,7 @@ def chat_review(user_id: str, session_id: str, message: str) -> dict:
     agent = ReviewAgent.from_state(agent_state)
 
     try:
+        agent.language = language
         result = agent.handle_message(message)
     except Exception as exc:
         persist_session_state(
@@ -197,7 +232,11 @@ def chat_review(user_id: str, session_id: str, message: str) -> dict:
         return {
             "status": "error",
             "type": "review",
-            "message": str(exc),
+            "message": _t(
+                language,
+                str(exc),
+                f"حدث خطأ أثناء تحليل المراجعات: {str(exc)}",
+            ),
             "session_id": session_id,
             "data": {},
         }
@@ -221,7 +260,11 @@ def chat_review(user_id: str, session_id: str, message: str) -> dict:
     return {
         "status": "success",
         "type": "review",
-        "message": "Updated review",
+        "message": _t(
+            language,
+            "Updated review",
+            "تم تحديث المراجعات",
+        ),
         "session_id": session_id,
         "data": result,
     }

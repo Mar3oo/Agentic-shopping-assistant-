@@ -1,22 +1,18 @@
 """
-Embedding service using Sentence Transformers.
-Loads model once and exposes clean encode interface.
+Embedding service using multilingual E5 Sentence Transformers.
+Supports Arabic + English semantic retrieval.
 """
 
 from typing import List
 from sentence_transformers import SentenceTransformer
 import numpy as np
 import threading
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 class EmbeddingModel:
     """
     Singleton wrapper around SentenceTransformer.
-    Ensures model loads only once.
-    Thread-safe for production usage.
+    Thread-safe model loader.
     """
 
     _instance = None
@@ -32,44 +28,36 @@ class EmbeddingModel:
 
     def _load_model(self):
         """
-        Load embedding model once.
+        Load multilingual embedding model.
         """
-        logger.info("[Embedding] Loading model...")
+        self.model = SentenceTransformer("intfloat/multilingual-e5-base")
 
-        # You can switch model here easily later
-        self.model = SentenceTransformer("all-MiniLM-L6-v2")
-
-        # simple in-memory cache
-        self.cache = {}
-
-        logger.info("[Embedding] Model loaded successfully")
-
-    def encode(self, texts: List[str]) -> np.ndarray:
+    def encode_documents(self, texts: List[str]) -> np.ndarray:
         """
-        Generate embeddings for list of texts.
-        Uses caching for repeated inputs.
+        Encode product documents/passages.
         """
 
-        results = []
+        formatted = [f"passage: {text}" for text in texts]
 
-        for text in texts:
-            if text in self.cache:
-                results.append(self.cache[text])
-                continue
+        return self.model.encode(
+            formatted,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+        )
 
-            embedding = self.model.encode(
-                text,
-                convert_to_numpy=True,
-                normalize_embeddings=True,
-                show_progress_bar=False,
-            )
+    def encode_queries(self, texts: List[str]) -> np.ndarray:
+        """
+        Encode user queries.
+        """
 
-            self.cache[text] = embedding
-            results.append(embedding)
+        formatted = [f"query: {text}" for text in texts]
 
-        return np.array(results)
+        return self.model.encode(
+            formatted,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+        )
 
 
-# Global accessor
 def get_embedding_model() -> EmbeddingModel:
     return EmbeddingModel()
