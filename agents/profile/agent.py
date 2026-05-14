@@ -18,7 +18,9 @@ llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.2)
 parser = PydanticOutputParser(pydantic_object=ProfileAgentOutput)
 
 
-def run_profile_agent(user_input: str, history=None, current_profile=None):
+def run_profile_agent(
+    user_input: str, language: str = "en", history=None, current_profile=None
+):
     """
     history: list of {"role": "user"/"assistant", "content": "..."}
     """
@@ -29,7 +31,20 @@ def run_profile_agent(user_input: str, history=None, current_profile=None):
     if history is None:
         history = []
 
-    messages = [SystemMessage(content=SYSTEM_PROMPT)]
+    language_instruction = (
+        """
+Respond to the user in Arabic.
+Keep JSON keys in English.
+Keep search queries optimized for ecommerce retrieval.
+English product/category terms are allowed inside search_queries.
+"""
+        if language == "ar"
+        else """
+Respond to the user in English.
+"""
+    )
+
+    messages = [SystemMessage(content=SYSTEM_PROMPT + "\n\n" + language_instruction)]
 
     messages.append(
         HumanMessage(

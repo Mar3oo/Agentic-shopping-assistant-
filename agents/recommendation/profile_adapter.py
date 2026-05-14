@@ -10,7 +10,8 @@ def parse_budget(budget_text):
     # handle "k"
     text = text.replace("k", "000")
 
-    numbers = re.findall(r"\d+", text)
+    normalized = str(text).replace(",", "")
+    numbers = re.findall(r"\d+(?:\.\d+)?", normalized)
 
     if not numbers:
         return None, None

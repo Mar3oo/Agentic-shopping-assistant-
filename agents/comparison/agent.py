@@ -26,6 +26,7 @@ class ComparisonAgent:
         self.source_urls = []
         self.raw_contents = None
         self.comparison_result = None
+        self.language = "en"
 
         self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
         self.tavily = TavilyClient(api_key=tavily_api_key)
@@ -40,6 +41,7 @@ class ComparisonAgent:
             "source_urls": self.source_urls,
             "raw_contents": self.raw_contents or [],
             "comparison_result": self.comparison_result,
+            "language": self.language,
         }
 
     @classmethod
@@ -53,7 +55,18 @@ class ComparisonAgent:
         agent.source_urls = state.get("source_urls") or []
         agent.raw_contents = state.get("raw_contents") or []
         agent.comparison_result = state.get("comparison_result")
+        agent.language = state.get("language", "en")
         return agent
+
+    def _language_instruction(self) -> str:
+        if self.language == "ar":
+            return (
+                "Respond entirely in Arabic. "
+                "Keep product names, technical specifications, "
+                "and brand names in English when appropriate."
+            )
+
+        return "Respond entirely in English."
 
     def _is_new_comparison(self, text: str):
         text = text.lower().strip()
@@ -84,9 +97,14 @@ class ComparisonAgent:
         # follow-up
         return self.answer_followup(user_input)
 
-    def start_comparison(self, user_input: str):
+    def start_comparison(
+        self,
+        user_input: str,
+        language: str = "en",
+    ):
 
         raw_products = self._parse_products(user_input)
+        self.language = language
 
         if len(raw_products) < 2:
             return "Please provide at least two products to compare."
@@ -121,6 +139,9 @@ class ComparisonAgent:
         combined_text = combined_text[:6000]
 
         prompt = f"""
+        
+{self._language_instruction()}
+
 You are a structured product comparison assistant.
 
 Products:
@@ -186,7 +207,11 @@ RULES:
                 "type": "feature_answer",
                 "feature": "unknown",
                 "comparison": {},
-                "summary": "Could not process the answer properly",
+                "summary": (
+                    "تعذر معالجة الإجابة بشكل صحيح"
+                    if self.language == "ar"
+                    else "Could not process the answer properly"
+                ),
                 "products": self.product_pairs,
             }
 
@@ -409,6 +434,8 @@ RULES:
         combined_text = combined_text[:6000]
 
         prompt = f"""
+{self._language_instruction()}
+
 You are a professional product comparison system.
 
 Products:
@@ -485,10 +512,20 @@ RULES:
             return result
         except Exception:
             return {
-                "summary": "Could not generate summary",
+                "summary": (
+                    "تعذر إنشاء ملخص المقارنة"
+                    if self.language == "ar"
+                    else "Could not generate summary"
+                ),
                 "products": self.product_pairs,
                 "comparison_table": [],
-                "key_differences": ["Failed to parse comparison"],
+                "key_differences": [
+                    (
+                        "فشل تحليل المقارنة"
+                        if self.language == "ar"
+                        else "Failed to parse comparison"
+                    )
+                ],
                 "recommendation": {},
             }
 

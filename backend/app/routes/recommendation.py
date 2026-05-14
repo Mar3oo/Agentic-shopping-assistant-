@@ -10,7 +10,11 @@ router = APIRouter(prefix="/recommendation", tags=["Recommendation"])
 
 @router.post("/start")
 def start(request: StartRequest):
-    return start_recommendation(user_id=request.user_id, message=request.message)
+    return start_recommendation(
+        user_id=request.user_id,
+        message=request.message,
+        language=request.language,
+    )
 
 
 @router.post("/chat")
@@ -19,4 +23,5 @@ def chat(request: ChatRequest):
         user_id=request.user_id,
         message=request.message,
         session_id=request.session_id,
+        language=request.language,
     )

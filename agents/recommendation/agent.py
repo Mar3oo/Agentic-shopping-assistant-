@@ -92,7 +92,7 @@ class RecommendationAgent:
             parts.extend(profile["must_have_features"])
 
         if profile.get("preferences"):
-            parts.extend(profile["preferences"].values())
+            parts.extend([str(v) for v in profile["preferences"].values()])
 
         # Priority → keywords
         priorities = profile.get("priorities", {})
@@ -180,7 +180,7 @@ class RecommendationAgent:
         # -----------------------------
         # 2) Embedding
         # -----------------------------
-        user_embedding = self.model.encode([user_text])[0]
+        user_embedding = self.model.encode_queries([user_text])[0]
 
         # -----------------------------
         # 3) Product type

@@ -194,7 +194,7 @@ def _upsert_record(prepared: Dict[str, Any]) -> str:
 
         if semantic_text.strip():
             model = get_embedding_model()
-            embedding = model.encode([semantic_text])[0].tolist()
+            embedding = model.encode_documents([semantic_text])[0].tolist()
 
             update_doc["$set"]["product.embedding"] = embedding
 

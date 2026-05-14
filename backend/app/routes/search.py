@@ -8,4 +8,8 @@ router = APIRouter(prefix="/search", tags=["Search"])
 
 @router.post("/")
 def search(request: SearchRequest):
-    return run_search(user_id=request.user_id, message=request.message)
+    return run_search(
+        user_id=request.user_id,
+        message=request.message,
+        language=request.language,
+    )

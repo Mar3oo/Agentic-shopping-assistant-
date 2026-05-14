@@ -14,6 +14,7 @@ class ReviewAgent:
         self.query = None
         self.sources = []
         self.reviews_data = None
+        self.language = "en"
 
         self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
         self.model = "llama-3.3-70b-versatile"
@@ -24,6 +25,7 @@ class ReviewAgent:
             "query": self.query,
             "sources": self.sources,
             "reviews_data": self.reviews_data,
+            "language": self.language,
         }
 
     @classmethod
@@ -34,7 +36,18 @@ class ReviewAgent:
         agent.query = state.get("query")
         agent.sources = state.get("sources") or []
         agent.reviews_data = state.get("reviews_data")
+        agent.language = state.get("language", "en")
         return agent
+
+    def _language_instruction(self) -> str:
+        if self.language == "ar":
+            return (
+                "Respond entirely in Arabic. "
+                "Keep product names, technical specifications, "
+                "and brand names in English when appropriate."
+            )
+
+        return "Respond entirely in English."
 
     def handle_message(self, user_input: str):
         normalized = " ".join(user_input.lower().strip().split())
@@ -67,7 +80,11 @@ class ReviewAgent:
             or normalized.endswith(" reviews")
         )
 
-    def start_review(self, user_input: str):
+    def start_review(
+        self,
+        user_input: str,
+        language: str = "en",
+    ):
 
         product = self._parse_product(user_input)
 
@@ -75,6 +92,7 @@ class ReviewAgent:
             return "Please specify a product."
 
         self.product = extract_clean_product_name(product)
+        self.language = language
 
         return self.run_review_pipeline()
 
@@ -146,9 +164,15 @@ class ReviewAgent:
     def answer_followup(self, user_input: str):
 
         if not self.reviews_data:
-            return "No review data available."
+            return (
+                "لا توجد بيانات مراجعات متاحة."
+                if self.language == "ar"
+                else "No review data available."
+            )
 
         prompt = f"""
+{self._language_instruction()}
+
 You are answering a follow-up question about a product.
 
 Product: {self.product}

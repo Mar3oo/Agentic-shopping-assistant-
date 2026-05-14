@@ -1,6 +1,9 @@
 from agents.comparison.agent import ComparisonAgent
 
-from backend.app.services.cache_service import load_cached_response, store_cached_response
+from backend.app.services.cache_service import (
+    load_cached_response,
+    store_cached_response,
+)
 from backend.app.services.rate_limit_service import enforce_rate_limit
 from backend.app.services.session_service import (
     append_assistant_message,
@@ -10,6 +13,10 @@ from backend.app.services.session_service import (
     open_session,
     persist_session_state,
 )
+
+
+def _t(language: str, en: str, ar: str) -> str:
+    return ar if language == "ar" else en
 
 
 def _assistant_summary(response) -> str:
@@ -25,7 +32,9 @@ def _is_new_comparison_task(agent_state: dict, message: str) -> bool:
     if normalized == "new_comparison":
         return True
 
-    current_products = [product.strip().lower() for product in agent_state.get("products") or []]
+    current_products = [
+        product.strip().lower() for product in agent_state.get("products") or []
+    ]
     if not current_products:
         return False
 
@@ -70,6 +79,7 @@ def _open_empty_comparison_session(user_id: str, message: str) -> dict:
 def _start_comparison_session(
     user_id: str,
     message: str,
+    language: str = "en",
     enforce_limit_guard: bool = True,
 ) -> dict:
     if enforce_limit_guard:
@@ -88,7 +98,10 @@ def _start_comparison_session(
             agent_state = cached["agent_state"]
         else:
             agent = ComparisonAgent()
-            response = agent.start_comparison(message)
+            response = agent.start_comparison(
+                message,
+                language=language,
+            )
             agent_state = agent.to_state()
             if isinstance(response, dict) and agent_state.get("comparison_active"):
                 store_cached_response(
@@ -117,10 +130,15 @@ def _start_comparison_session(
         return {
             "status": "success",
             "type": "comparison",
-            "message": "Here is your comparison",
+            "message": _t(
+                language,
+                "Here is your comparison",
+                "هذه مقارنة بين المنتجات",
+            ),
             "session_id": session_id,
             "data": response,
         }
+
     except Exception as exc:
         persist_session_state(
             user_id,
@@ -139,17 +157,35 @@ def _start_comparison_session(
         return {
             "status": "error",
             "type": "comparison",
-            "message": str(exc),
+            "message": _t(
+                language,
+                str(exc),
+                f"حدث خطأ أثناء المقارنة: {str(exc)}",
+            ),
             "session_id": session_id,
             "data": {},
         }
 
 
-def start_comparison(user_id: str, message: str) -> dict:
-    return _start_comparison_session(user_id, message, enforce_limit_guard=True)
+def start_comparison(
+    user_id: str,
+    message: str,
+    language: str = "en",
+) -> dict:
+    return _start_comparison_session(
+        user_id,
+        message,
+        language=language,
+        enforce_limit_guard=True,
+    )
 
 
-def chat_comparison(user_id: str, session_id: str, message: str) -> dict:
+def chat_comparison(
+    user_id: str,
+    session_id: str,
+    message: str,
+    language: str = "en",
+) -> dict:
     enforce_rate_limit(user_id, "comparison_chat", limit=12, window_seconds=60)
 
     session = load_session(
@@ -162,7 +198,11 @@ def chat_comparison(user_id: str, session_id: str, message: str) -> dict:
         return {
             "status": "error",
             "type": "comparison",
-            "message": "Start comparison first",
+            "message": _t(
+                language,
+                "Start comparison first",
+                "ابدأ المقارنة أولاً",
+            ),
             "data": {},
         }
 
@@ -172,12 +212,15 @@ def chat_comparison(user_id: str, session_id: str, message: str) -> dict:
         close_session_for_user(user_id, session_id)
         if message.strip().lower() == "new_comparison":
             return _open_empty_comparison_session(user_id, message)
-        return _start_comparison_session(user_id, message, enforce_limit_guard=False)
+        return _start_comparison_session(
+            user_id, message, language=language, enforce_limit_guard=False
+        )
 
     append_user_message(user_id, session_id, "comparison", message)
     agent = ComparisonAgent.from_state(agent_state)
 
     try:
+        agent.language = language
         response = agent.handle_message(message)
     except Exception as exc:
         persist_session_state(
@@ -197,7 +240,11 @@ def chat_comparison(user_id: str, session_id: str, message: str) -> dict:
         return {
             "status": "error",
             "type": "comparison",
-            "message": str(exc),
+            "message": _t(
+                language,
+                str(exc),
+                f"حدث خطأ أثناء المقارنة: {str(exc)}",
+            ),
             "session_id": session_id,
             "data": {},
         }
@@ -221,7 +268,11 @@ def chat_comparison(user_id: str, session_id: str, message: str) -> dict:
     return {
         "status": "success",
         "type": "comparison",
-        "message": "Updated comparison",
+        "message": _t(
+            language,
+            "Updated comparison",
+            "تم تحديث المقارنة",
+        ),
         "session_id": session_id,
         "data": response,
     }
