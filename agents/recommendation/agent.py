@@ -158,7 +158,7 @@ class RecommendationAgent:
     def recommend(
         self,
         profile: Dict[str, Any],
-        top_k: int = 4,
+        top_k: int = 3,
     ) -> List[Dict[str, Any]]:
 
         # -----------------------------
@@ -254,7 +254,7 @@ class RecommendationAgent:
         # 8) LLM Reranking (SMART)
         # -----------------------------
         expanded = self.reranker.rerank(
-            user_text, ranked, top_k=top_k * 4
+            user_text, ranked, top_k=top_k * 3
         )  # keep more for final budget clipping
 
         # -----------------------------

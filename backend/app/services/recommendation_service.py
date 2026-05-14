@@ -71,7 +71,7 @@ def _initialize_recommendation_session(
     user_id: str,
     session_id: str,
     message: str,
-    language: str,
+    language: str = "en",
 ) -> dict:
     parsed, _ = run_profile_agent(
         message,
@@ -119,7 +119,7 @@ def _initialize_recommendation_session(
 def _open_reset_recommendation_session(
     user_id: str,
     message: str,
-    language: str,
+    language: str = "en",
 ) -> str:
     session = open_session(user_id=user_id, agent_type="recommendation", title=message)
     session_id = session["session_id"]
@@ -221,8 +221,13 @@ def chat_recommendation(
     if not session_has_context:
         append_user_message(user_id, session_id, "recommendation", message)
         try:
+            if language == "en":
+                return _initialize_recommendation_session(user_id, session_id, message)
             return _initialize_recommendation_session(
-                user_id, session_id, message, language
+                user_id,
+                session_id,
+                message,
+                language,
             )
         except Exception as exc:
             persist_session_state(
@@ -292,11 +297,14 @@ def chat_recommendation(
 
     if response.get("type") == "new_search":
         close_session_for_user(user_id, session_id)
-        new_session_id = _open_reset_recommendation_session(
-            user_id,
-            message,
-            session_language,
-        )
+        if session_language == "en":
+            new_session_id = _open_reset_recommendation_session(user_id, message)
+        else:
+            new_session_id = _open_reset_recommendation_session(
+                user_id,
+                message,
+                session_language,
+            )
         return {
             "status": "success",
             "type": "reset",
@@ -362,7 +370,10 @@ def chat_recommendation(
                 "تم تحديث التوصيات",
             ),
             "session_id": session_id,
-            "data": {"products": response["data"], "suggestions": _suggestions()},
+            "data": {
+                "products": response["data"],
+                "suggestions": _suggestions(session_language),
+            },
         }
 
     if response["type"] == "message":

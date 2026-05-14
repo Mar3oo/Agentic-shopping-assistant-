@@ -46,10 +46,18 @@ def _is_new_comparison_task(agent_state: dict, message: str) -> bool:
     return len(candidate_products) >= 2 and candidate_products != current_products
 
 
-def _open_empty_comparison_session(user_id: str, message: str) -> dict:
+def _open_empty_comparison_session(
+    user_id: str,
+    message: str,
+    language: str = "en",
+) -> dict:
     session = open_session(user_id=user_id, agent_type="comparison", title=message)
     session_id = session["session_id"]
-    prompt = "Ready for a new comparison. Please enter products."
+    prompt = _t(
+        language,
+        "Ready for a new comparison. Please enter products.",
+        "جاهز لمقارنة جديدة. من فضلك أدخل المنتجات.",
+    )
     append_user_message(user_id, session_id, "comparison", message)
     persist_session_state(
         user_id,
@@ -211,7 +219,7 @@ def chat_comparison(
     if _is_new_comparison_task(agent_state, message):
         close_session_for_user(user_id, session_id)
         if message.strip().lower() == "new_comparison":
-            return _open_empty_comparison_session(user_id, message)
+            return _open_empty_comparison_session(user_id, message, language=language)
         return _start_comparison_session(
             user_id, message, language=language, enforce_limit_guard=False
         )

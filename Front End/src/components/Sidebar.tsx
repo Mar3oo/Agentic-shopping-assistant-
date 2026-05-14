@@ -4,9 +4,9 @@ import {
   Sparkles, LayoutGrid, Star, Search,
   LogOut, Zap, MessageSquare, Plus, Settings,
 } from 'lucide-react';
-import { useApp, useDispatch, type Page } from '../store/AppContext';
+import { useApp, useDispatch, type ChatMessage, type Page } from '../store/AppContext';
 import { useT } from '../i18n/translations';
-import { getSessions, getSession, getSessionMessages } from '../services/api';
+import { ApiClientError, getSessions, getSession, getSessionMessages } from '../services/api';
 import RecoLogo from './RecoLogo';
 import RECOAvatar from './RECOAvatar';
 
@@ -20,22 +20,55 @@ const NAV: Array<{ key: Page; icon: React.ElementType; en: string; ar: string }>
 
 const ICON_RAIL_W = 52; // width of collapsed icon rail
 
+function normalizeMessages(rawMsgs: Array<Record<string, unknown>>): ChatMessage[] {
+  return rawMsgs.map(m => ({
+    role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+    content: String(m.content || ''),
+    payload: m.payload as Record<string, unknown> | undefined,
+  }));
+}
+
+function lastAssistantPayload(messages: ChatMessage[]): unknown {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    if (msg.role === 'assistant' && msg.payload) return msg.payload;
+  }
+  return null;
+}
+
+function payloadData(payload: unknown): unknown {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  const data = (payload as Record<string, unknown>).data;
+  return data || payload;
+}
+
+function errorText(error: unknown): string {
+  return error instanceof ApiClientError ? error.message : String(error);
+}
+
 export default function Sidebar({ mobileOpen, onClose }: { mobileOpen?: boolean; onClose?: () => void }) {
   const { state } = useApp();
   const dispatch = useDispatch();
   const t = useT(state.lang);
   const [sessions, setSessions] = useState<Array<Record<string, unknown>>>([]);
+  const [loadError, setLoadError] = useState('');
   const open = state.sidebarOpen;
 
   useEffect(() => {
     if (!state.userId) return;
+    setLoadError('');
     getSessions(state.userId, 30)
       .then(res => {
         const data = ((res as any).data?.sessions as Array<Record<string, unknown>>) || [];
         setSessions(data);
+        dispatch({ type: 'SET_SESSIONS', payload: data });
       })
-      .catch(() => {});
-  }, [state.userId, state.activeSessionId]);
+      .catch(e => {
+        setLoadError(errorText(e));
+        setSessions([]);
+        dispatch({ type: 'SET_SESSIONS', payload: [] });
+      });
+  }, [state.userId, state.activeSessionId, dispatch]);
 
   const handleSession = async (s: Record<string, unknown>) => {
     const sid = s.session_id as string;
@@ -47,26 +80,44 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen?: boolean;
       ]);
       const sesData = ((sesRes as any).data?.session as Record<string, unknown>) || {};
       const agentType = sesData.agent_type as string;
+      const agentState = (sesData.agent_state as Record<string, unknown>) || {};
       const rawMsgs = ((msgRes as any).data?.messages as Array<Record<string, unknown>>) || [];
-      const messages = rawMsgs.map(m => ({
-        role: m.role === 'user' ? 'user' as const : 'assistant' as const,
-        content: String(m.content || ''),
-        payload: m.payload as Record<string, unknown>,
-      }));
+      const messages = normalizeMessages(rawMsgs);
+      const lastPayloadData = payloadData(lastAssistantPayload(messages)) as any;
       dispatch({ type: 'SET_ACTIVE_SESSION', payload: sid });
       if (agentType === 'recommendation') {
-        const products = ((sesData.agent_state as any)?.last_recommendations as any[]) || [];
-        dispatch({ type: 'SET_RECOMMENDATION', payload: { recommendationSessionId: sid, recommendationMessages: messages, recommendationProducts: products } });
+        let products = (agentState.last_recommendations as any[]) || [];
+        if (!products.length && Array.isArray(lastPayloadData)) products = lastPayloadData;
+        if (!products.length && Array.isArray(lastPayloadData?.products)) products = lastPayloadData.products;
+        dispatch({ type: 'SET_RECOMMENDATION', payload: {
+          recommendationSessionId: sid,
+          recommendationMessages: messages,
+          recommendationProducts: products,
+          recommendationSuggestions: Array.isArray(lastPayloadData?.suggestions) ? lastPayloadData.suggestions : [],
+        } });
         dispatch({ type: 'SET_PAGE', payload: 'recommendation' });
       } else if (agentType === 'comparison') {
-        dispatch({ type: 'SET_COMPARISON', payload: { comparisonSessionId: sid, comparisonMessages: messages } });
+        const comparisonResult = agentState.comparison_result || lastPayloadData || null;
+        dispatch({ type: 'SET_COMPARISON', payload: {
+          comparisonSessionId: sid,
+          comparisonMessages: messages,
+          comparisonResult: comparisonResult as Record<string, unknown> | null,
+        } });
         dispatch({ type: 'SET_PAGE', payload: 'comparison' });
       } else if (agentType === 'review') {
-        dispatch({ type: 'SET_REVIEW', payload: { reviewSessionId: sid, reviewMessages: messages } });
+        const reviewResult = agentState.reviews_data || lastPayloadData || null;
+        dispatch({ type: 'SET_REVIEW', payload: {
+          reviewSessionId: sid,
+          reviewMessages: messages,
+          reviewResult: reviewResult as Record<string, unknown> | null,
+        } });
         dispatch({ type: 'SET_PAGE', payload: 'review' });
       }
+      setLoadError('');
       onClose?.();
-    } catch { /* silent */ }
+    } catch (e) {
+      setLoadError(errorText(e));
+    }
   };
 
   const newChat = () => {
@@ -150,6 +201,7 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen?: boolean;
                   <Plus size={10} /> {t('newChat')}
                 </button>
               </div>
+              {loadError && <div className="history-empty" role="alert">{loadError}</div>}
               <div className="history-items">
                 <AnimatePresence>
                   {sessions.length === 0 && <div className="history-empty">{t('noChats')}</div>}
