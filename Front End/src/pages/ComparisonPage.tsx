@@ -11,6 +11,7 @@ function CompResult({ result }: { result: Record<string, unknown> | null }) {
   const t = useT(state.lang);
   const [expanded, setExpanded] = useState(false);
   if (!result) return <div className="no-data">{t('noComparisonData')}</div>;
+  if (typeof (result as unknown) === 'string') return <p className="result-summary">{result as unknown as string}</p>;
   const { summary, comparison_table, key_differences, recommendation, sources } = result as any;
   return (
     <div>
@@ -74,12 +75,13 @@ export default function ComparisonPage() {
     if (!query.trim()) return;
     setLoading(true); setError('');
     try {
-      const res: any = await startComparison(state.userId!, query);
+      const res: any = await startComparison(state.userId!, query, state.lang);
       if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
       dispatch({ type:'SET_COMPARISON', payload:{
         comparisonSessionId: res.session_id, comparisonResult: res.data,
         comparisonMessages: [{ role:'user', content:query },{ role:'assistant', content:res.message||'', payload:res }],
       }});
+      dispatch({ type:'SET_ACTIVE_SESSION', payload: res.session_id });
       setQuery('');
     } catch(e) { setError(e instanceof ApiClientError ? e.message : String(e)); }
     finally { setLoading(false); }
@@ -90,10 +92,14 @@ export default function ComparisonPage() {
     setChatLoad(true);
     try {
       dispatch({ type:'APPEND_MSG', payload:{ agent:'comparison', msg:{ role:'user', content:msg }}});
-      const res: any = await chatComparison(state.userId!, state.comparisonSessionId, msg);
+      const res: any = await chatComparison(state.userId!, state.comparisonSessionId, msg, state.lang);
       if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
       dispatch({ type:'APPEND_MSG', payload:{ agent:'comparison', msg:{ role:'assistant', content:res.message||'', payload:res }}});
-      dispatch({ type:'SET_COMPARISON', payload:{ comparisonResult: res.data }});
+      dispatch({ type:'SET_COMPARISON', payload:{
+        comparisonSessionId: res.session_id || state.comparisonSessionId,
+        comparisonResult: res.type === 'reset' ? null : res.data,
+      }});
+      if (res.session_id) dispatch({ type:'SET_ACTIVE_SESSION', payload: res.session_id });
     } catch(e) { setError(e instanceof ApiClientError ? e.message : String(e)); }
     finally { setChatLoad(false); }
   };

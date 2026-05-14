@@ -1,12 +1,12 @@
 from fastapi import APIRouter
 
-from backend.app.schemas.review import ReviewChatRequest, ReviewStartRequest
+from backend.app.schemas.review import ReviewChatRequest, ReviewResponse, ReviewStartRequest
 from backend.app.services.review_service import chat_review, start_review
 
 router = APIRouter(prefix="/review", tags=["Review"])
 
 
-@router.post("/start")
+@router.post("/start", response_model=ReviewResponse)
 def start(request: ReviewStartRequest):
     return start_review(
         user_id=request.user_id,
@@ -15,7 +15,7 @@ def start(request: ReviewStartRequest):
     )
 
 
-@router.post("/chat")
+@router.post("/chat", response_model=ReviewResponse)
 def chat(request: ReviewChatRequest):
     return chat_review(
         user_id=request.user_id,

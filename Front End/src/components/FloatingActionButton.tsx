@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, X, Send } from 'lucide-react';
 import { useApp, useDispatch } from '../store/AppContext';
+import { ApiClientError, startRecommendation } from '../services/api';
 
 export default function FloatingActionButton() {
   const { state } = useApp();
@@ -11,12 +12,43 @@ export default function FloatingActionButton() {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleAsk = () => {
-    if (!input.trim()) return;
-    dispatch({ type: 'SET_PAGE', payload: 'recommendation' });
-    setOpen(false);
-    setInput('');
+  const handleAsk = async () => {
+    const prompt = input.trim();
+    if (!prompt || loading) return;
+    if (!state.userId) {
+      setError(state.lang === 'ar' ? 'يرجى تسجيل الدخول أولاً.' : 'Please sign in first.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    (['recommendation', 'comparison', 'review'] as const).forEach(agent => {
+      dispatch({ type: 'RESET_AGENT', payload: agent });
+    });
+
+    try {
+      const res: any = await startRecommendation(state.userId, prompt, state.lang);
+      dispatch({ type: 'SET_RECOMMENDATION', payload: {
+        recommendationSessionId: res.session_id,
+        recommendationMessages: [
+          { role: 'user', content: prompt },
+          { role: 'assistant', content: res.message || '', payload: res },
+        ],
+        recommendationProducts: res.data?.products || [],
+        recommendationSuggestions: res.data?.suggestions || [],
+      } });
+      if (res.session_id) dispatch({ type: 'SET_ACTIVE_SESSION', payload: res.session_id });
+      dispatch({ type: 'SET_PAGE', payload: 'recommendation' });
+      setOpen(false);
+      setInput('');
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -39,22 +71,25 @@ export default function FloatingActionButton() {
             </div>
             <div className="fab-panel-body">
               <p className="fab-panel-hint">What are you looking for today?</p>
+              {error && <div className="alert-error" role="alert">{error}</div>}
               <div className="fab-input-row">
                 <input
                   className="fab-input"
                   placeholder={state.lang === 'ar' ? 'اسألني عن أي منتج...' : 'Ask me about any product...'}
                   value={input}
                   onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleAsk()}
+                  onKeyDown={e => { if (e.key === 'Enter') void handleAsk(); }}
+                  disabled={loading}
                   autoFocus
                 />
                 <motion.button
                   className="fab-send"
-                  onClick={handleAsk}
+                  onClick={() => { void handleAsk(); }}
+                  disabled={!input.trim() || loading}
                   whileHover={{ scale: 1.08 }}
                   whileTap={{ scale: 0.93 }}
                 >
-                  <Send size={14} />
+                  {loading ? <span className="spinner" /> : <Send size={14} />}
                 </motion.button>
               </div>
               <div className="fab-quick-chips">

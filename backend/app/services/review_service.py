@@ -46,10 +46,18 @@ def _is_new_review_task(agent_state: dict, message: str) -> bool:
     )
 
 
-def _open_empty_review_session(user_id: str, message: str) -> dict:
+def _open_empty_review_session(
+    user_id: str,
+    message: str,
+    language: str = "en",
+) -> dict:
     session = open_session(user_id=user_id, agent_type="review", title=message)
     session_id = session["session_id"]
-    prompt = "Ready for a new review search. Please enter a product."
+    prompt = _t(
+        language,
+        "Ready for a new review search. Please enter a product.",
+        "جاهز للبحث عن مراجعة جديدة. من فضلك أدخل اسم المنتج.",
+    )
     append_user_message(user_id, session_id, "review", message)
     persist_session_state(
         user_id,
@@ -171,7 +179,12 @@ def start_review(
     message: str,
     language: str = "en",
 ) -> dict:
-    return _start_review_session(user_id, message, enforce_limit_guard=True)
+    return _start_review_session(
+        user_id,
+        message,
+        language=language,
+        enforce_limit_guard=True,
+    )
 
 
 def chat_review(
@@ -205,8 +218,13 @@ def chat_review(
     if _is_new_review_task(agent_state, message):
         close_session_for_user(user_id, session_id)
         if " ".join(message.lower().strip().split()) == "new_review":
-            return _open_empty_review_session(user_id, message)
-        return _start_review_session(user_id, message, enforce_limit_guard=False)
+            return _open_empty_review_session(user_id, message, language=language)
+        return _start_review_session(
+            user_id,
+            message,
+            language=language,
+            enforce_limit_guard=False,
+        )
 
     append_user_message(user_id, session_id, "review", message)
     agent = ReviewAgent.from_state(agent_state)

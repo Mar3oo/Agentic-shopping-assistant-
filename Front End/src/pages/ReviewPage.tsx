@@ -11,6 +11,7 @@ function ReviewResult({ result }: { result: any }) {
   const t = useT(state.lang);
   const [expanded, setExpanded] = useState(false);
   if (!result) return <div className="no-data">{t('noReviewData')}</div>;
+  if (typeof result === 'string') return <p className="result-summary">{result}</p>;
   const { summary, sentiment_score, value_for_money, pros, cons, insights, best_for, sources } = result;
   return (
     <div>
@@ -88,12 +89,13 @@ export default function ReviewPage() {
     if (!query.trim()) return;
     setLoading(true); setError('');
     try {
-      const res: any = await startReview(state.userId!, query);
+      const res: any = await startReview(state.userId!, query, state.lang);
       if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
       dispatch({ type:'SET_REVIEW', payload:{
         reviewSessionId: res.session_id, reviewResult: res.data,
         reviewMessages: [{ role:'user', content:query },{ role:'assistant', content:res.message||'', payload:res }],
       }});
+      dispatch({ type:'SET_ACTIVE_SESSION', payload: res.session_id });
       setQuery('');
     } catch(e) { setError(e instanceof ApiClientError ? e.message : String(e)); }
     finally { setLoading(false); }
@@ -104,10 +106,14 @@ export default function ReviewPage() {
     setChatLoad(true);
     try {
       dispatch({ type:'APPEND_MSG', payload:{ agent:'review', msg:{ role:'user', content:msg }}});
-      const res: any = await chatReview(state.userId!, state.reviewSessionId, msg);
+      const res: any = await chatReview(state.userId!, state.reviewSessionId, msg, state.lang);
       if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
       dispatch({ type:'APPEND_MSG', payload:{ agent:'review', msg:{ role:'assistant', content:res.message||'', payload:res }}});
-      dispatch({ type:'SET_REVIEW', payload:{ reviewResult: res.data }});
+      dispatch({ type:'SET_REVIEW', payload:{
+        reviewSessionId: res.session_id || state.reviewSessionId,
+        reviewResult: res.type === 'reset' ? null : res.data,
+      }});
+      if (res.session_id) dispatch({ type:'SET_ACTIVE_SESSION', payload: res.session_id });
     } catch(e) { setError(e instanceof ApiClientError ? e.message : String(e)); }
     finally { setChatLoad(false); }
   };

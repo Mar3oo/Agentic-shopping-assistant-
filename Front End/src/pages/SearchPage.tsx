@@ -19,7 +19,7 @@ export default function SearchPage() {
     if (!query.trim()) return;
     setLoading(true); setError('');
     try {
-      const res: any = await search(state.userId!, query);
+      const res: any = await search(state.userId!, query, state.lang);
       if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
       dispatch({ type:'SET_SEARCH_RESULTS', payload: (res.data?.products as Product[]) || [] });
     } catch(e) { setError(e instanceof ApiClientError ? e.message : String(e)); }

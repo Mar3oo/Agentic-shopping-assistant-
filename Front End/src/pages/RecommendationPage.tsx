@@ -27,7 +27,10 @@ export default function RecommendationPage() {
   const [selRev,   setSelRev]   = useState('');
 
   const applyResp = (prompt: string, res: any, reset = false) => {
-    if (res.session_id) dispatch({ type:'SET_RECOMMENDATION', payload:{ recommendationSessionId: res.session_id }});
+    if (res.session_id) {
+      dispatch({ type:'SET_RECOMMENDATION', payload:{ recommendationSessionId: res.session_id }});
+      dispatch({ type:'SET_ACTIVE_SESSION', payload: res.session_id });
+    }
     const base = reset ? [] : state.recommendationMessages;
     let products = state.recommendationProducts;
     let suggestions = state.recommendationSuggestions;
@@ -46,7 +49,7 @@ export default function RecommendationPage() {
     setLoading(true); setError('');
     ['recommendation','comparison','review'].forEach(a => dispatch({ type:'RESET_AGENT', payload:a as any }));
     try {
-      const res: any = await startRecommendation(state.userId!, query);
+      const res: any = await startRecommendation(state.userId!, query, state.lang);
       if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
       applyResp(query, res, true); setQuery('');
     } catch(e) { setError(e instanceof ApiClientError ? e.message : String(e)); }
@@ -57,7 +60,7 @@ export default function RecommendationPage() {
     if (!state.recommendationSessionId) return;
     setChatLoad(true);
     try {
-      const res: any = await chatRecommendation(state.userId!, state.recommendationSessionId, msg);
+      const res: any = await chatRecommendation(state.userId!, state.recommendationSessionId, msg, state.lang);
       if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
       applyResp(msg, res);
     } catch(e) { setError(e instanceof ApiClientError ? e.message : String(e)); }
@@ -68,12 +71,13 @@ export default function RecommendationPage() {
     if (selComp.length !== 2) return;
     const q = `compare ${extractShortName(selComp[0])} vs ${extractShortName(selComp[1])}`;
     try {
-      const res: any = await startComparison(state.userId!, q);
+      const res: any = await startComparison(state.userId!, q, state.lang);
       if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
       dispatch({ type:'SET_COMPARISON', payload:{
         comparisonSessionId: res.session_id, comparisonResult: res.data,
         comparisonMessages: [{ role:'user', content:q },{ role:'assistant', content:res.message||'', payload:res }],
       }});
+      dispatch({ type:'SET_ACTIVE_SESSION', payload: res.session_id });
       dispatch({ type:'SET_PAGE', payload:'comparison' });
     } catch(e) { setError(e instanceof ApiClientError ? e.message : String(e)); }
   };
@@ -83,12 +87,13 @@ export default function RecommendationPage() {
     if (!product) return;
     const q = `${product} reviews`;
     try {
-      const res: any = await startReview(state.userId!, q);
+      const res: any = await startReview(state.userId!, q, state.lang);
       if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
       dispatch({ type:'SET_REVIEW', payload:{
         reviewSessionId: res.session_id, reviewResult: res.data,
         reviewMessages: [{ role:'user', content:q },{ role:'assistant', content:res.message||'', payload:res }],
       }});
+      dispatch({ type:'SET_ACTIVE_SESSION', payload: res.session_id });
       dispatch({ type:'SET_PAGE', payload:'review' });
     } catch(e) { setError(e instanceof ApiClientError ? e.message : String(e)); }
   };
