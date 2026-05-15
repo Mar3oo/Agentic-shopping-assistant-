@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, X, Send } from 'lucide-react';
 import { useApp, useDispatch } from '../store/AppContext';
-import { ApiClientError, startRecommendation } from '../services/api';
+import { ApiClientError, search } from '../services/api';
 
 export default function FloatingActionButton() {
   const { state } = useApp();
@@ -25,23 +25,12 @@ export default function FloatingActionButton() {
 
     setLoading(true);
     setError('');
-    (['recommendation', 'comparison', 'review'] as const).forEach(agent => {
-      dispatch({ type: 'RESET_AGENT', payload: agent });
-    });
 
     try {
-      const res: any = await startRecommendation(state.userId, prompt, state.lang);
-      dispatch({ type: 'SET_RECOMMENDATION', payload: {
-        recommendationSessionId: res.session_id,
-        recommendationMessages: [
-          { role: 'user', content: prompt },
-          { role: 'assistant', content: res.message || '', payload: res },
-        ],
-        recommendationProducts: res.data?.products || [],
-        recommendationSuggestions: res.data?.suggestions || [],
-      } });
-      if (res.session_id) dispatch({ type: 'SET_ACTIVE_SESSION', payload: res.session_id });
-      dispatch({ type: 'SET_PAGE', payload: 'recommendation' });
+      const res: any = await search(state.userId, prompt, state.lang);
+      if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
+      dispatch({ type: 'SET_SEARCH_RESULTS', payload: res.data?.products || [] });
+      dispatch({ type: 'SET_PAGE', payload: 'search' });
       setOpen(false);
       setInput('');
     } catch (e) {

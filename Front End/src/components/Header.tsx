@@ -18,16 +18,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     <motion.header className="topbar" initial={{ y: -8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.4 }}>
       <button className="menu-btn" onClick={onMenuClick}><Menu size={20} /></button>
 
-      <div className="topbar-search">
-        <Search className="topbar-search-icon" />
-        <input
-          type="text"
-          className="topbar-search-input"
-          placeholder={t('searchPlaceholder')}
-          onKeyDown={e => { if (e.key === 'Enter') dispatch({ type: 'SET_PAGE', payload: 'search' }); }}
-        />
-        <kbd className="kbd">⌘K</kbd>
-      </div>
+      {/* Top search removed per design — kept for future use if needed */}
 
       <div className="topbar-actions">
         <motion.button

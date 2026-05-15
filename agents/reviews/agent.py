@@ -3,6 +3,7 @@ from agents.reviews.sentiment_analyzer import analyze_reviews
 from agents.shared.product_name_extractor import extract_clean_product_name
 from groq import Groq
 import os
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -136,7 +137,7 @@ class ReviewAgent:
         transcripts = get_transcripts_for_videos(video_ids[:3])
 
         if not transcripts:
-            return "Could not fetch reviews."
+            return self._generate_review_from_llm()
 
         result = analyze_reviews(self.product, transcripts)
 
@@ -160,6 +161,65 @@ class ReviewAgent:
         self.reviews_data = result
 
         return result
+
+    def _generate_review_from_llm(self):
+        prompt = f"""
+{self._language_instruction()}
+
+You are an expert product reviewer.
+Provide a concise AI-powered review for the product below.
+Return ONLY a valid JSON object.
+
+{{
+  "summary": "...",
+  "sentiment_score": "...",
+  "value_for_money": "...",
+  "pros": ["..."],
+  "cons": ["..."],
+  "insights": ["..."],
+  "best_for": ["..."],
+  "sources": []
+}}
+
+Product: {self.product}
+"""
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+        )
+
+        raw = response.choices[0].message.content.strip()
+        try:
+            start = raw.find("{")
+            end = raw.rfind("}") + 1
+            cleaned = raw[start:end]
+            result = json.loads(cleaned)
+            if isinstance(result, dict):
+                result.setdefault("pros", [])
+                result.setdefault("cons", [])
+                result.setdefault("insights", [])
+                result.setdefault("best_for", [])
+                result.setdefault("sources", [])
+                return result
+        except Exception:
+            pass
+
+        return {
+            "summary": (
+                "لا توجد بيانات مراجعات متاحة."
+                if self.language == "ar"
+                else "No review data available."
+            ),
+            "sentiment_score": None,
+            "value_for_money": None,
+            "pros": [],
+            "cons": [],
+            "insights": [],
+            "best_for": [],
+            "sources": [],
+        }
 
     def answer_followup(self, user_input: str):
 
