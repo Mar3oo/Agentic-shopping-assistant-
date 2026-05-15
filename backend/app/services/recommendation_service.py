@@ -1,9 +1,9 @@
-from agents.profile.agent import run_profile_agent
-from agents.recommendation.agent import RecommendationAgent
-from agents.recommendation.chat_handler import RecommendationChatHandler
-from agents.recommendation.profile_adapter import adapt_profile
+from backend.agents.profile.agent import run_profile_agent
+from backend.agents.recommendation.agent import RecommendationAgent
+from backend.agents.recommendation.chat_handler import RecommendationChatHandler
+from backend.agents.recommendation.profile_adapter import adapt_profile
 
-from Data_Base.profile_repo import get_profile, save_profile
+from backend.database.profile_repo import get_profile, save_profile
 from backend.app.services.rate_limit_service import enforce_rate_limit
 from backend.app.services.session_service import (
     append_assistant_message,

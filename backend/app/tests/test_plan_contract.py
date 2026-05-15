@@ -4,8 +4,8 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from agents.comparison.agent import ComparisonAgent
-from agents.reviews.agent import ReviewAgent
+from backend.agents.comparison.agent import ComparisonAgent
+from backend.agents.reviews.agent import ReviewAgent
 from backend.app.main import rate_limit_exception_handler
 from backend.app.routes.session import router as session_router
 from backend.app.services.cache_service import build_cache_key

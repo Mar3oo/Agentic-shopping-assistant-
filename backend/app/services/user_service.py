@@ -1,4 +1,4 @@
-from Data_Base.user_repo import create_guest_user
+from backend.database.user_repo import create_guest_user
 
 
 def create_guest_user_response() -> dict:

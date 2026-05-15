@@ -1,4 +1,4 @@
-from agents.comparison.agent import ComparisonAgent
+from backend.agents.comparison.agent import ComparisonAgent
 
 from backend.app.services.cache_service import (
     load_cached_response,

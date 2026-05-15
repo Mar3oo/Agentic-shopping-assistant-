@@ -1,6 +1,6 @@
 from email.mime import message
 
-from agents.reviews.agent import ReviewAgent
+from backend.agents.reviews.agent import ReviewAgent
 
 from backend.app.services.cache_service import (
     load_cached_response,

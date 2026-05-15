@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import patch
 
-from agents.comparison.agent import ComparisonAgent
-from agents.reviews.agent import ReviewAgent
+from backend.agents.comparison.agent import ComparisonAgent
+from backend.agents.reviews.agent import ReviewAgent
 
 
 class ReviewProductNameTests(unittest.TestCase):

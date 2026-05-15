@@ -1,9 +1,9 @@
 import time
 from threading import Lock
 
-from Data_Base.search_history_repo import insert_search_history
-from Data_Base.search_session_repo import upsert_search_session
-from search_pipeline.pipeline import SearchPipeline
+from backend.database.search_history_repo import insert_search_history
+from backend.database.search_session_repo import upsert_search_session
+from backend.search_pipeline.pipeline import SearchPipeline
 
 from backend.app.services.rate_limit_service import enforce_rate_limit
 from backend.app.services.session_service import ensure_user
