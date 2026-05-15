@@ -425,7 +425,7 @@ RULES:
         """
 
         if not contents:
-            return "No data available for comparison."
+            return self.generate_comparison_from_knowledge()
 
         # 🔥 نجمع كل المحتوى
         combined_text = "\n\n".join(contents)
@@ -528,6 +528,80 @@ RULES:
                 ],
                 "recommendation": {},
             }
+
+    def generate_comparison_from_knowledge(self):
+        prompt = f"""
+{self._language_instruction()}
+
+You are a professional product comparison assistant.
+Compare the following products using only your knowledge and general product research.
+Return ONLY a valid JSON object.
+
+FORMAT:
+
+{{
+  "summary": "...",
+  "products": [
+    {{
+      "product_clean": "...",
+      "product_full": "..."
+    }}
+  ],
+  "comparison_table": [
+    {{
+      "feature": "...",
+      "product_1": "...",
+      "product_2": "..."
+    }}
+  ],
+  "key_differences": [
+    "...",
+    "..."
+  ],
+  "recommendation": {{
+    "product_1": ["..."],
+    "product_2": ["..."]
+  }}
+}}
+
+Products:
+{", ".join(self.products)}
+"""
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+        )
+        raw = response.choices[0].message.content.strip()
+        try:
+            start = raw.find("{")
+            end = raw.rfind("}") + 1
+            cleaned = raw[start:end]
+            result = json.loads(cleaned)
+            if isinstance(result, dict):
+                result.setdefault("products", self.product_pairs)
+                result.setdefault("comparison_table", [])
+                result.setdefault("key_differences", [])
+                result.setdefault("recommendation", {})
+                return result
+        except Exception:
+            pass
+
+        return {
+            "summary": (
+                "تعذر إنشاء ملخص المقارنة"
+                if self.language == "ar"
+                else "Could not generate summary"
+            ),
+            "products": self.product_pairs,
+            "comparison_table": [],
+            "key_differences": [
+                "فشل تحليل المقارنة"
+                if self.language == "ar"
+                else "Failed to parse comparison"
+            ],
+            "recommendation": {},
+        }
 
     def filter_links(self, links: list):
         """

@@ -1,6 +1,8 @@
 import { useRef, useEffect, useState } from 'react';
+import { useApp } from '../store/AppContext';
+import { useT } from '../i18n/translations';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Paperclip, User } from 'lucide-react';
+import { Send, Paperclip, User, ArrowDownCircle } from 'lucide-react';
 import type { ChatMessage } from '../store/AppContext';
 import RECOAvatar, { type AvatarState } from './RECOAvatar';
 
@@ -19,15 +21,59 @@ const msgAnim = {
   exit:    { opacity: 0, scale: 0.95 },
 };
 
-export default function ChatBox({ messages, onSend, placeholder = 'Type a message…', loading = false, emptyText, disabled = false }: Props) {
+export default function ChatBox({ messages, onSend, placeholder, loading = false, emptyText, disabled = false }: Props) {
+  const { state } = useApp();
+  const t = useT(state.lang);
   const [input, setInput] = useState('');
+  const [showScrollDown, setShowScrollDown] = useState(false);
+  const [showScrollToChat, setShowScrollToChat] = useState(false);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const chatRootRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const isRTL = document.documentElement.dir === 'rtl' || document.body.dir === 'rtl';
+  const hasMounted = useRef(false);
+  const isRTL = state.lang === 'ar';
 
-  const defaultEmpty = isRTL ? 'لا توجد محادثة بعد.' : 'No conversation yet.';
-  const defaultHint  = isRTL ? 'اسألني عن أي منتج، سعر أو مقارنة.' : 'Ask me about any product, price or comparison.';
+  const defaultEmpty = emptyText ?? t('noConversation');
+  const defaultHint = t('askRefinements');
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
+  const isAtBottom = (el: HTMLDivElement) => {
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  };
+
+  const handleMessagesScroll = () => {
+    const el = messagesRef.current;
+    if (!el) return;
+    setShowScrollDown(!isAtBottom(el));
+  };
+
+  const handleWindowScroll = () => {
+    const el = chatRootRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setShowScrollToChat(rect.top > window.innerHeight - 120 || rect.bottom < 140);
+  };
+
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!hasMounted.current) {
+      hasMounted.current = true;
+      if (el) setShowScrollDown(!isAtBottom(el));
+      return;
+    }
+
+    if (el && isAtBottom(el)) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setShowScrollDown(false);
+    } else if (el) {
+      setShowScrollDown(true);
+    }
+  }, [messages.length, loading]);
+
+  useEffect(() => {
+    handleWindowScroll();
+    window.addEventListener('scroll', handleWindowScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleWindowScroll);
+  }, []);
 
   const send = () => {
     const t = input.trim();
@@ -52,8 +98,8 @@ export default function ChatBox({ messages, onSend, placeholder = 'Type a messag
       </div>
 
       {/* Messages + input */}
-      <div className="chat-box">
-        <div className="chat-messages">
+      <div className="chat-box" ref={chatRootRef}>
+        <div className="chat-messages" ref={messagesRef} onScroll={handleMessagesScroll}>
 
           {/* Empty state */}
           {messages.length === 0 && !loading && (
@@ -64,8 +110,8 @@ export default function ChatBox({ messages, onSend, placeholder = 'Type a messag
               transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
             >
               <RECOAvatar size={110} avatarState="idle" interactive showThoughts={false} />
-              <div className="chat-empty-avatar-label">{emptyText || defaultEmpty}</div>
-              <div className="chat-empty-avatar-hint">{defaultHint}</div>
+                <div className="chat-empty-avatar-label">{emptyText || defaultEmpty}</div>
+                <div className="chat-empty-avatar-hint">{defaultHint}</div>
             </motion.div>
           )}
 
@@ -92,6 +138,20 @@ export default function ChatBox({ messages, onSend, placeholder = 'Type a messag
             ))}
           </AnimatePresence>
 
+          {showScrollDown && (
+            <button
+              type="button"
+              className="chat-scroll-down"
+              onClick={() => {
+                bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+                setShowScrollDown(false);
+              }}
+              title={isRTL ? 'انتقل إلى آخر المحادثة' : 'Jump to latest chat'}
+            >
+              <ArrowDownCircle size={20} />
+            </button>
+          )}
+
           {loading && (
             <motion.div className="chat-msg" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
               <div className="chat-av bot" style={{ background: 'transparent', border: 'none', padding: 0, overflow: 'visible', width: 32, height: 32 }}>
@@ -105,8 +165,19 @@ export default function ChatBox({ messages, onSend, placeholder = 'Type a messag
           <div ref={bottomRef} />
         </div>
 
+        {showScrollToChat && (
+          <button
+            type="button"
+            className="scroll-to-chat-button"
+            onClick={() => chatRootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            title={isRTL ? 'العودة إلى المحادثة' : 'Back to chat'}
+          >
+            <ArrowDownCircle size={20} />
+          </button>
+        )}
+
         {/* Input bar */}
-        <div className="chat-input-bar">
+          <div className="chat-input-bar">
           <button className="chat-attach-btn" title={isRTL ? 'إرفاق ملف' : 'Attach file'}>
             <Paperclip size={15} />
           </button>
@@ -114,7 +185,7 @@ export default function ChatBox({ messages, onSend, placeholder = 'Type a messag
             className="chat-input"
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={disabled ? (isRTL ? 'ابدأ جلسة أولاً.' : 'Start a session first.') : placeholder}
+            placeholder={disabled ? t('startSession') : (placeholder || t('askRefinements'))}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
             disabled={disabled || loading}
           />

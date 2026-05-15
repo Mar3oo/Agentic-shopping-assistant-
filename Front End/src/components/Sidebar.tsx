@@ -178,17 +178,7 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen?: boolean;
               })}
             </nav>
 
-            {/* Upgrade */}
-            <motion.div className="sidebar-upgrade" whileHover={{ scale: 1.01 }} transition={{ duration: 0.2 }}>
-              <div className="upgrade-title">
-                <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" style={{ display:'inline', marginInlineEnd:6 }}>
-                  <path d="M8 1l1.9 4.1L14 6l-3 2.9.7 4.1L8 10.9l-3.7 2.1.7-4.1L2 6l4.1-.9z"/>
-                </svg>
-                {t('upgradePremium')}
-              </div>
-              <div className="upgrade-desc">{t('upgradeDesc')}</div>
-              <button className="btn-upgrade"><Zap size={11} /> {t('upgradeNow')}</button>
-            </motion.div>
+            {/* Upgrade card removed to free space for chat history */}
 
             {/* Chat history */}
             <div className="sidebar-history-section">
@@ -198,7 +188,7 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen?: boolean;
                   {t('chatHistorySidebar')}
                 </span>
                 <button className="btn-new-chat" onClick={newChat}>
-                  <Plus size={10} /> {t('newChat')}
+                  {t('newChat')}
                 </button>
               </div>
               {loadError && <div className="history-empty" role="alert">{loadError}</div>}

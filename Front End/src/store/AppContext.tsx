@@ -14,6 +14,7 @@ export interface Product {
   source?: string;
   details_text?: string;
   link?: string;
+  image_url?: string;
 }
 
 export interface ChatMessage {

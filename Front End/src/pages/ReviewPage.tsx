@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Star, Send, MessageSquare, ThumbsUp, ThumbsDown, Lightbulb, Target, ChevronDown, ChevronUp, Link, TrendingUp } from 'lucide-react';
+import { Star, MessageSquare, ThumbsUp, ThumbsDown, Lightbulb, Target, Link, TrendingUp } from 'lucide-react';
 import { useApp, useDispatch } from '../store/AppContext';
 import { useT } from '../i18n/translations';
 import { startReview, chatReview, ApiClientError } from '../services/api';
@@ -9,7 +9,6 @@ import ChatBox from '../components/ChatBox';
 function ReviewResult({ result }: { result: any }) {
   const { state } = useApp();
   const t = useT(state.lang);
-  const [expanded, setExpanded] = useState(false);
   if (!result) return <div className="no-data">{t('noReviewData')}</div>;
   if (typeof result === 'string') return <p className="result-summary">{result}</p>;
   const { summary, sentiment_score, value_for_money, pros, cons, insights, best_for, sources } = result;
@@ -68,10 +67,6 @@ function ReviewResult({ result }: { result: any }) {
             : <span key={i} className="source-chip">{String(s.title||s).slice(0,30)}</span>)}</div>
         </div>
       )}
-      <button className="expand-toggle" onClick={()=>setExpanded(!expanded)}>
-        {expanded?<ChevronUp size={13}/>:<ChevronDown size={13}/>} {t('rawPayload')}
-      </button>
-      {expanded && <pre className="raw-json">{JSON.stringify(result,null,2)}</pre>}
     </div>
   );
 }
@@ -80,40 +75,47 @@ export default function ReviewPage() {
   const { state } = useApp();
   const dispatch  = useDispatch();
   const t = useT(state.lang);
-  const [query,    setQuery]    = useState('');
   const [loading,  setLoading]  = useState(false);
   const [chatLoad, setChatLoad] = useState(false);
   const [error,    setError]    = useState('');
+  const resultsRef = useRef<HTMLDivElement>(null);
 
-  const handleStart = async () => {
-    if (!query.trim()) return;
-    setLoading(true); setError('');
-    try {
-      const res: any = await startReview(state.userId!, query, state.lang);
-      if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
-      dispatch({ type:'SET_REVIEW', payload:{
-        reviewSessionId: res.session_id, reviewResult: res.data,
-        reviewMessages: [{ role:'user', content:query },{ role:'assistant', content:res.message||'', payload:res }],
-      }});
-      dispatch({ type:'SET_ACTIVE_SESSION', payload: res.session_id });
-      setQuery('');
-    } catch(e) { setError(e instanceof ApiClientError ? e.message : String(e)); }
-    finally { setLoading(false); }
-  };
+  useEffect(() => {
+    if (state.reviewResult) {
+      const el = resultsRef.current;
+      if (el) {
+        const header = document.querySelector('.page-header-row') as HTMLElement | null;
+        const headerHeight = header ? header.getBoundingClientRect().height : 0;
+        const padding = 20;
+        const top = el.getBoundingClientRect().top + window.scrollY - headerHeight - padding;
+        window.scrollTo({ top: top > 0 ? top : 0, behavior: 'smooth' });
+      }
+    }
+  }, [state.reviewResult]);
 
   const handleChat = async (msg: string) => {
-    if (!state.reviewSessionId) return;
-    setChatLoad(true);
+    setChatLoad(true); setError('');
     try {
-      dispatch({ type:'APPEND_MSG', payload:{ agent:'review', msg:{ role:'user', content:msg }}});
-      const res: any = await chatReview(state.userId!, state.reviewSessionId, msg, state.lang);
-      if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
-      dispatch({ type:'APPEND_MSG', payload:{ agent:'review', msg:{ role:'assistant', content:res.message||'', payload:res }}});
-      dispatch({ type:'SET_REVIEW', payload:{
-        reviewSessionId: res.session_id || state.reviewSessionId,
-        reviewResult: res.type === 'reset' ? null : res.data,
-      }});
-      if (res.session_id) dispatch({ type:'SET_ACTIVE_SESSION', payload: res.session_id });
+      if (!state.reviewSessionId) {
+        dispatch({ type:'RESET_AGENT', payload:'review' });
+        const res: any = await startReview(state.userId!, msg, state.lang);
+        if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
+        dispatch({ type:'SET_REVIEW', payload:{
+          reviewSessionId: res.session_id, reviewResult: res.data,
+          reviewMessages: [{ role:'user', content:msg },{ role:'assistant', content:res.message||'', payload:res }],
+        }});
+        dispatch({ type:'SET_ACTIVE_SESSION', payload: res.session_id });
+      } else {
+        dispatch({ type:'APPEND_MSG', payload:{ agent:'review', msg:{ role:'user', content:msg }}});
+        const res: any = await chatReview(state.userId!, state.reviewSessionId, msg, state.lang);
+        if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
+        dispatch({ type:'APPEND_MSG', payload:{ agent:'review', msg:{ role:'assistant', content:res.message||'', payload:res }}});
+        dispatch({ type:'SET_REVIEW', payload:{
+          reviewSessionId: res.session_id || state.reviewSessionId,
+          reviewResult: res.type === 'reset' ? null : res.data,
+        }});
+        if (res.session_id) dispatch({ type:'SET_ACTIVE_SESSION', payload: res.session_id });
+      }
     } catch(e) { setError(e instanceof ApiClientError ? e.message : String(e)); }
     finally { setChatLoad(false); }
   };
@@ -122,27 +124,18 @@ export default function ReviewPage() {
     <div className="page-wrapper">
       <motion.div className="page-header-row" initial={{ opacity:0, y:-12 }} animate={{ opacity:1, y:0 }} transition={{ duration:.4 }}>
         <div>
-          <div className="page-eyebrow"><Star size={11} /> Reviews</div>
+          <div className="page-eyebrow"><Star size={11} /> {t('review')}</div>
           <h1 className="page-title">{t('reviewTitle')}</h1>
           <p className="page-subtitle">{t('reviewDesc')}</p>
         </div>
         <div className="page-title-icon"><Star size={22} /></div>
       </motion.div>
 
-      <motion.div className="glass-card prompt-card" initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:.1 }}>
-        <div className="prompt-row">
-          <input className="prompt-input" placeholder={t('reviewPlaceholder')} value={query}
-            onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleStart()} disabled={loading} />
-          <motion.button className="btn btn-primary btn-lg" onClick={handleStart} disabled={loading||!query.trim()} whileTap={{ scale:.97 }}>
-            {loading ? <span className="spinner" /> : <><Send size={15} /> {t('startReview')}</>}
-          </motion.button>
-        </div>
-      </motion.div>
-
       {error && <div className="alert-error">{error}</div>}
-
+      {/* Show review results when available */}
       {state.reviewResult && (
-        <motion.div className="glass-card result-card" initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }}>
+        <motion.div ref={resultsRef as any} className="glass-card result-card" initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:.15 }}>
+          <div style={{ marginBottom: 10, fontWeight: 700 }}>{t('reviewResults')}</div>
           <ReviewResult result={state.reviewResult} />
         </motion.div>
       )}
@@ -150,8 +143,8 @@ export default function ReviewPage() {
       <motion.div className="glass-card chat-section" initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:.2 }}>
         <div className="chat-section-title"><MessageSquare size={15} /> {t('chatHistory')}</div>
         <ChatBox messages={state.reviewMessages} onSend={handleChat}
-          placeholder={t('followUpReview')} loading={chatLoad}
-          emptyText={t('noReviewData')} disabled={!state.reviewSessionId} />
+          placeholder={state.reviewSessionId ? t('followUpReview') : t('reviewPlaceholder')}
+          loading={chatLoad} emptyText={t('noReviewData')} />
       </motion.div>
     </div>
   );

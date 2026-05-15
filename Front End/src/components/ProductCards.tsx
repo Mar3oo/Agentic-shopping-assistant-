@@ -33,6 +33,10 @@ function fmtPrice(p: Product): string {
   return p.currency ? `${p.currency} ${p.price}` : String(p.price);
 }
 
+function fallbackImage(p: Product, idx: number) {
+  return p.image_url?.trim() || getImg(p.title, idx);
+}
+
 interface Props {
   products: Product[];
   title?: string;
@@ -59,7 +63,7 @@ export default function ProductCards({ products, title, onSelect, selectedTitles
         {products.map((p, i) => {
           const sel = selectedTitles.includes(p.title || '');
           const price = fmtPrice(p);
-          const imgSrc = getImg(p.title, i);
+          const imgSrc = fallbackImage(p, i);
           return (
             <motion.div
               key={i}
@@ -75,7 +79,9 @@ export default function ProductCards({ products, title, onSelect, selectedTitles
                 </div>
               )}
               <div className="product-img-wrap">
-                <img src={imgSrc} alt={p.title || 'Product'} loading="lazy" />
+                <img src={imgSrc} alt={p.title || 'Product'} loading="lazy"
+                  onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = getImg(p.title, i); }}
+                />
               </div>
               <div className="product-card-body">
                 {p.source && <div className="product-source">{p.source}</div>}
