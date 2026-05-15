@@ -1,61 +1,54 @@
+<div align="center">
+
+<img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white"/>
+<img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white"/>
+<img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black"/>
+<img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white"/>
+<img src="https://img.shields.io/badge/MongoDB-Atlas-47A248?style=for-the-badge&logo=mongodb&logoColor=white"/>
+<img src="https://img.shields.io/badge/Groq-LLaMA_3.3_70B-FF4500?style=for-the-badge"/>
+
 # 🛒 Agentic Shopping Assistant
 
-> A Python-powered shopping intelligence system — combining FastAPI, LLM agents, semantic search, and real-time web lookup to help users discover, compare, and evaluate products through natural conversation.
+**A multi-agent AI system that turns natural language into personalized, ranked product recommendations — with live web search, deep comparison, and YouTube-powered review analysis.**
+
+[Overview](#-overview) · [Architecture](#️-architecture) · [Tech Stack](#-tech-stack) · [Quick Start](#-quick-start) · [System Flows](#-system-flows) · [Agents & Core Logic](#-agents--core-logic) · [API Reference](#-api-reference) · [Development Guide](#-development-guide)
+
+</div>
 
 ---
 
-## Table of Contents
+## 📌 Overview
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Quick Start](#quick-start)
-- [Running the System](#running-the-system)
-- [Environment Variables](#environment-variables)
-- [System Flows](#system-flows)
-- [Agents & Core Logic](#agents--core-logic)
-- [API Reference](#api-reference)
-- [Development Guide](#development-guide)
-- [Known Limitations](#known-limitations)
-- [Troubleshooting](#troubleshooting)
+Agentic Shopping Assistant is a production-grade, full-stack AI application built as a graduation project. It chains together specialized LLM agents, hybrid semantic retrieval, and real-time web intelligence to help users discover, compare, and evaluate products — all through natural conversation.
 
----
-
-## Overview
-
-Agentic Shopping Assistant is a multi-agent AI system that transforms natural language shopping requests into structured, ranked product recommendations — and supports follow-up conversation to refine results.
+The system is backed by a **React + TypeScript** web interface with **full English and Arabic (RTL) support**, and is designed to handle the entire shopping journey: from an initial "I need a laptop under 50,000 EGP" all the way through follow-up refinements, side-by-side comparisons, and sentiment-based review summaries.
 
 **What a user can do:**
 
-- Describe what they want to buy in plain language
-- Receive ranked product recommendations from an indexed database
-- Refine recommendations through follow-up chat
-- Compare two products using live web search and scraped context
-- Analyze product reviews using YouTube transcripts and sentiment analysis
-- Run a live product search independent of the local product database
+- Describe what they want to buy in plain language and receive ranked recommendations
+- Refine results through multi-turn follow-up conversation
+- Compare two products using live web search and deep content scraping
+- Analyze product reviews from YouTube transcripts with sentiment, pros/cons, and value metrics
+- Run a real-time product search completely independent of the local database
 
 **How it fits together:**
 
 | Layer | Role |
 |---|---|
-| **FastAPI** | Stable HTTP API — the canonical integration surface |
-| **Streamlit UI** | Temporary developer UI for testing backend flows |
-| **MongoDB** | Persistent store for users, sessions, products, messages, cache |
-| **LLM Agents (Groq)** | Profile extraction, intent routing, reranking, review analysis, comparison |
+| **FastAPI Backend** | Stable HTTP API — the canonical integration surface |
+| **React Frontend** | Production web interface built with TypeScript, Vite, and TailwindCSS |
+| **MongoDB** | Persistent store for users, sessions, products, messages, and cache |
+| **LLM Agents (Groq)** | Specialized agents for profiling, recommendation, comparison, and review analysis |
 | **Scrapers + Ingestion** | Collect and embed product records for recommendation retrieval |
-
-> **Note on legacy files:** `main.py` at the root and `agents/recommendation/main.py` are legacy CLI experiments — not the canonical entrypoint. The canonical backend is `backend/app/main.py`.
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 ```mermaid
 flowchart LR
-    User["Developer / Tester / Future Frontend"] --> UI["Streamlit UI\nui_streamlit"]
-    User --> API["FastAPI Backend\nbackend/app/main.py"]
-    UI --> API
+    User["User"] --> Frontend["React Frontend\nfrontend/"]
+    Frontend --> API["FastAPI Backend\nbackend/app/main.py"]
 
     API --> AuthRoutes["Auth / User / Session Routes"]
     API --> RecRoutes["Recommendation Routes"]
@@ -75,7 +68,7 @@ flowchart LR
     RecService --> RecAgent["Recommendation Agent"]
     ProfileAgent --> Groq["Groq LLM API"]
     RecAgent --> BM25["BM25 Index"]
-    RecAgent --> Embedder["SentenceTransformer\nall-MiniLM-L6-v2"]
+    RecAgent --> Embedder["SentenceTransformer\nMultilingual E5"]
     RecAgent --> Reranker["Groq LLM Reranker"]
     BM25 --> Mongo
     Embedder --> Mongo
@@ -88,113 +81,114 @@ flowchart LR
     SearchExtractor --> Groq
 
     CompareService --> ComparisonAgent["Comparison Agent"]
+    CompareService --> Fallback["Comparison Fallback"]
     ComparisonAgent --> Tavily["Tavily Search API"]
     ComparisonAgent --> WebPages["Requests / Playwright"]
     ComparisonAgent --> Groq
 
     ReviewService --> ReviewAgent["Review Agent"]
+    ReviewService --> Fallback["Review Fallback"]
     ReviewAgent --> YouTube["YouTube Data API"]
     ReviewAgent --> Transcripts["youtube-transcript-api"]
     ReviewAgent --> Groq
 
-    Scrapers["Selenium Scrapers\nAmazon / Noon / Jumia"] -. pre-ingest .-> Ingestion["Data_Base/ingestion.py"]
+    Scrapers["Selenium Scrapers\nAmazon / Noon / Jumia"] -. pre-ingest .-> Ingestion["backend/database/ingestion.py"]
     Ingestion -. product embeddings .-> Mongo
 ```
 
 **Runtime layers:**
 
-- **API layer** — `backend/app/routes/*` — HTTP endpoints and Pydantic schemas
-- **Service layer** — `backend/app/services/*` — rate limiting, caching, session management, agent orchestration
-- **Agent layer** — `agents/*` — domain logic for profiling, recommendation, comparison, and review analysis
-- **Search pipeline** — `search_pipeline/*` — Serper + Groq live product search, used by `/search/`
-- **Persistence layer** — `Data_Base/*` — MongoDB collection wrappers, repositories, indexes
-- **Scraping / ingestion** — `scrapers/*` + `Data_Base/ingestion.py` — product collection and embedding
-- **Developer UI** — `ui_streamlit/*` — Streamlit interface that mirrors likely frontend flows
+| Layer | Location | Responsibility |
+|---|---|---|
+| **Frontend** | `frontend/` | React + TypeScript + Vite UI with i18n and RTL |
+| **API** | `backend/app/routes/` | HTTP endpoints, request validation (Pydantic) |
+| **Services** | `backend/app/services/` | Rate limiting, caching, session management, agent orchestration |
+| **Agents** | `backend/agents/` | Domain logic: profiling, recommendation, comparison, reviews |
+| **Search Pipeline** | `backend/search_pipeline/` | Serper + Groq live product discovery |
+| **Persistence** | `backend/database/` | MongoDB repos, ingestion pipeline, cache management |
+| **Scrapers** | `backend/scrapers/` | Selenium-based e-commerce data collection |
 
 ---
 
-## Tech Stack
+## 🛠 Tech Stack
+
+**Frontend**
+- React 18, TypeScript, Vite
+- TailwindCSS, Framer Motion (animations)
+- Lucide React (iconography)
+- Context API for state management, i18n with full RTL
 
 **Backend**
-- Python, FastAPI, Uvicorn, Pydantic, PyMongo, python-dotenv
+- Python 3.11+, FastAPI, Uvicorn, Pydantic v2, PyMongo, python-dotenv
 
 **AI & Retrieval**
-- Groq API via `groq` and `langchain-groq`
-- LangChain Core output parsing
-- Sentence Transformers (`all-MiniLM-L6-v2`)
-- FAISS CPU, BM25 (`rank-bm25`)
+- Groq API — `llama-3.3-70b-versatile`
+- LangChain Core (output parsing)
+- Sentence Transformers — `multilingual-e5-small`
+- FAISS CPU, BM25 via `rank-bm25`
 - NumPy, scikit-learn, SciPy
 
 **Search, Reviews & Scraping**
 - Serper API (product/web search)
-- Tavily API (comparison search)
+- Tavily API (comparison research)
 - YouTube Data API + `youtube-transcript-api`
 - Requests, BeautifulSoup, Playwright, Selenium, webdriver-manager
 
-**UI**
-- Streamlit
-
 **Storage**
-- MongoDB Atlas (or any compatible URI)
-- Database: `graduation_project_db`
-- Primary product collection: `products_raw`
+- MongoDB Atlas — database: `graduation_project_db`
+- Collections: `products_raw`, `users`, `sessions`, `messages`, `api_cache`, `user_feedback`, `search_sessions`, `search_history`
 
 ---
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 .
 ├── backend/
-│   └── app/
-│       ├── main.py                  # FastAPI entrypoint ← canonical
-│       ├── routes/                  # HTTP route modules
-│       ├── schemas/                 # Pydantic request/response contracts
-│       ├── services/                # Orchestration, sessions, caching, auth, rate limits
-│       └── tests/                   # Backend unit tests and smoke scripts
+│   ├── agents/
+│   │   ├── profile/                     # LLM profile extraction agent
+│   │   ├── recommendation/              # Retrieval, ranking, chat refinement
+│   │   ├── comparison/                  # Web-search-based comparison agent
+│   │   ├── reviews/                     # YouTube review analysis agent
+│   │   └── shared/                      # Shared product-name cleanup helpers
+│   ├── app/
+│   │   ├── main.py                      # FastAPI entrypoint ← canonical
+│   │   ├── routes/                      # HTTP route modules
+│   │   ├── schemas/                     # Pydantic request/response contracts
+│   │   ├── services/                    # Orchestration, sessions, caching, rate limits
+│   │   └── tests/                       # Backend unit tests and smoke scripts
+│   ├── database/
+│   │   ├── db.py                        # Mongo client, collection accessors, indexes
+│   │   ├── ingestion.py                 # Product validation, embedding, upsert pipeline
+│   │   ├── *_repo.py                    # Mongo repository functions
+│   │   └── config.py                    # DB and collection configuration
+│   ├── search_pipeline/
+│   │   ├── pipeline.py                  # Search → extract → clean → rank orchestration
+│   │   ├── search.py                    # Serper client
+│   │   ├── extractor.py                 # Groq JSON product extractor
+│   │   ├── cleaner.py                   # Normalization, link cleanup, dedupe
+│   │   ├── ranker.py                    # Lexical ranking
+│   │   └── test_pipeline.py             # Runnable smoke tests
+│   ├── scrapers/
+│   │   ├── amazon.py                    # Amazon Egypt scraper
+│   │   ├── noon.py                      # Noon Egypt scraper
+│   │   ├── jumia.py                     # Jumia Egypt scraper
+│   │   ├── base.py                      # Selenium driver and shared helpers
+│   │   └── run_scraper.py               # Multi-site scraper runner
+│   └── tools/
+│       ├── product_classifier.py        # Product type classifier
+│       └── logger.py                    # Logger helper
 │
-├── agents/
-│   ├── profile/                     # LLM profile extraction agent
-│   ├── recommendation/              # Recommendation retrieval, ranking, chat refinement
-│   ├── comparison/                  # Web-search-based comparison agent
-│   ├── reviews/                     # YouTube review analysis agent
-│   └── shared/                      # Shared product-name cleanup helpers
+├── frontend/
+│   └── src/
+│       ├── components/                  # Reusable UI components (ChatBox, Avatar, etc.)
+│       ├── pages/                       # Feature pages: Auth, Rec, Compare, Review, Search
+│       ├── services/                    # Axios/Fetch API client
+│       ├── store/                       # AppContext state management
+│       └── i18n/                        # Translations and RTL configuration
 │
-├── Data_Base/
-│   ├── db.py                        # Mongo client, collection accessors, indexes
-│   ├── ingestion.py                 # Product validation, embedding, upsert pipeline
-│   ├── *_repo.py                    # Mongo repository functions
-│   └── config.py                    # Mongo DB and collection configuration
-│
-├── search_pipeline/
-│   ├── pipeline.py                  # Search → extract → clean → rank orchestration
-│   ├── search.py                    # Serper client
-│   ├── extractor.py                 # Groq JSON product extractor
-│   ├── cleaner.py                   # Product normalization, link cleanup, dedupe
-│   ├── ranker.py                    # Lexical ranking
-│   └── test_pipeline.py             # Runnable smoke tests
-│
-├── scrapers/
-│   ├── amazon.py                    # Amazon Egypt scraper
-│   ├── noon.py                      # Noon Egypt scraper
-│   ├── jumia.py                     # Jumia Egypt scraper
-│   ├── base.py                      # Selenium/Brave driver and shared helpers
-│   └── run_scraper.py               # Multi-site scraper runner
-│
-├── ui_streamlit/
-│   ├── app.py                       # Streamlit entrypoint
-│   ├── pages/                       # Auth, recommendation, comparison, review, search pages
-│   ├── components/                  # Reusable Streamlit renderers
-│   └── services/                    # API client and session-state helpers
-│
-├── tools/
-│   ├── product_classifier.py        # Product type classifier
-│   ├── reset_db.py                  # Legacy DB reset utility
-│   └── logger.py                    # Logger helper
-│
-├── main.py                          # Legacy CLI entrypoint — not canonical
 ├── requirements.txt
-├── .env                             # Local secrets — gitignored
+├── .env                                 # Environment secrets (do not commit)
 └── README.md
 ```
 
@@ -202,151 +196,139 @@ flowchart LR
 
 | File | Purpose |
 |---|---|
-| `backend/app/main.py` | FastAPI app, router registration, Mongo init/shutdown |
+| `backend/app/main.py` | FastAPI app entry point, router registration, MongoDB lifecycle |
 | `backend/app/services/recommendation_service.py` | Starts and continues recommendation sessions |
 | `backend/app/services/search_service.py` | Stateless live search with 10-min memory cache |
 | `backend/app/services/comparison_service.py` | Wraps `ComparisonAgent`, persists and caches comparisons |
 | `backend/app/services/review_service.py` | Wraps `ReviewAgent`, persists and caches reviews |
-| `backend/app/services/session_service.py` | User creation, session creation, message persistence |
-| `Data_Base/db.py` | Mongo client lifecycle and index creation |
-| `Data_Base/ingestion.py` | Validates, embeds, and upserts product records |
-| `agents/recommendation/agent.py` | BM25 retrieval, semantic scoring, LLM reranking |
-| `ui_streamlit/services/api_client.py` | Living map of all backend API calls |
+| `backend/app/services/session_service.py` | User creation, session management, message persistence |
+| `backend/database/db.py` | Mongo client lifecycle and index creation |
+| `backend/database/ingestion.py` | Validates, embeds, and upserts product records |
+| `backend/agents/recommendation/agent.py` | BM25 retrieval, semantic scoring, LLM reranking |
+| `frontend/src/services/api.ts` | Living map of all backend API calls |
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
-```powershell
-# 1. Create and activate a virtual environment
+### Prerequisites
+
+- **Node.js** v18+ and **npm**
+- **Python** 3.11+
+- **MongoDB Atlas** account and connection URI
+- API keys for: Groq, Serper, Tavily, YouTube Data API
+
+### 1. Clone & Configure
+
+```bash
+git clone https://github.com/your-username/agentic-shopping-assistant.git
+cd agentic-shopping-assistant
+```
+
+Create a `.env` file in the root directory — see [Environment Variables](#-environment-variables) for the full reference.
+
+### 2. Backend Setup
+
+```bash
+# Create and activate a virtual environment
 python -m venv venv
-.\venv\Scripts\Activate.ps1
+source venv/bin/activate        # Windows: venv\Scripts\activate
 
-# 2. Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
 
-# 3. Install Playwright browser runtime (used by comparison agent)
+# Install Playwright browser (required for comparison scraping)
 python -m playwright install chromium
+```
 
-# 4. Create .env with required keys (see Environment Variables section)
+### 3. Frontend Setup
 
-# 5. Start the backend
+```bash
+cd frontend
+npm install
+```
+
+### 4. Run the System
+
+**Start the backend API:**
+```bash
 uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
+```
 
-# 6. In a second terminal, start the developer UI
-streamlit run ui_streamlit/app.py
+**Start the frontend:**
+```bash
+cd frontend
+npm run dev
 ```
 
 | Service | URL |
 |---|---|
 | API health check | `http://127.0.0.1:8000/` |
 | Swagger / interactive docs | `http://127.0.0.1:8000/docs` |
-| Streamlit developer UI | `http://localhost:8501` |
+| React web app | `http://localhost:5173/` |
+
+> **Startup note:** `init_collections()` runs automatically and creates MongoDB indexes. `SearchPipeline()` is instantiated at import time in `search_service.py`, so `SERPER_API_KEY` must be present in `.env` even if you don't use `/search/`.
 
 ---
 
-## Running the System
+## 🔐 Environment Variables
 
-### Backend API
-
-```powershell
-uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-Expected health response:
-
-```json
-{ "status": "ok" }
-```
-
-**Important startup behavior:**
-- `init_collections()` runs automatically on startup — MongoDB indexes are created.
-- `SearchPipeline()` is instantiated at import time in `search_service.py`, so `SERPER_API_KEY` must be present even if you don't use `/search/`.
-
-### Streamlit Developer UI
-
-```powershell
-streamlit run ui_streamlit/app.py
-```
-
-The Streamlit UI is a **temporary developer/mock frontend** — not a production interface. It simulates common flows (auth, recommendation, comparison, review, search, session restore) and is the best behavioral reference for anyone building a real frontend.
-
-### Standalone Search Pipeline
-
-```powershell
-# CLI usage
-python -m search_pipeline "gaming laptop" --search-limit 10 --top-k 5
-
-# Smoke tests
-python search_pipeline/test_pipeline.py
-
-# Live mode with custom query
-python search_pipeline/test_pipeline.py --live --query "best gaming laptop under 1500"
-```
-
-### Backend Unit Tests
-
-```powershell
-python -m unittest discover backend/app/tests
-```
-
-> Some tests import modules that construct API clients at import time. Keep `.env` populated, or set dummy keys when running tests that mock network calls.
-
----
-
-## Environment Variables
-
-Create a `.env` file at the repository root. **Do not commit this file** — it is already in `.gitignore`.
+Create a `.env` file at the repository root. **Never commit this file** — it is already listed in `.gitignore`.
 
 ```env
-MONGO_URI_CLOUD=mongodb+srv://...
-GROQ_API_KEY=...
+MONGO_URI_CLOUD=mongodb+srv://<user>:<password>@cluster.mongodb.net/graduation_project_db
+GROQ_API_KEY=gsk_...
 SERPER_API_KEY=...
 YOUTUBE_API_KEY=...
 TAVILY_API_KEY=...
-
-# Optional Streamlit settings
-SHOPPING_ASSISTANT_BACKEND_URL=http://127.0.0.1:8000
-SHOPPING_ASSISTANT_TIMEOUT_SECONDS=120
 ```
 
 | Variable | Required | Used By | Purpose |
 |---|---|---|---|
-| `MONGO_URI_CLOUD` | ✅ Always | `Data_Base/config.py` | MongoDB connection string |
-| `GROQ_API_KEY` | ✅ For agents | Profile, recommendation, comparison, review, search | All LLM calls |
-| `SERPER_API_KEY` | ✅ For backend startup | `search_pipeline/search.py` | Serper.dev shopping/organic search |
-| `YOUTUBE_API_KEY` | ✅ For review flow | `agents/reviews/youtube_service.py` | YouTube video search |
-| `TAVILY_API_KEY` | ✅ For comparison flow | `agents/comparison/agent.py` | Web search for comparison pages |
-| `SHOPPING_ASSISTANT_BACKEND_URL` | ⬜ Optional | Streamlit UI | Defaults to `http://127.0.0.1:8000` |
-| `SHOPPING_ASSISTANT_TIMEOUT_SECONDS` | ⬜ Optional | Streamlit UI | Defaults to `120` |
+| `MONGO_URI_CLOUD` | ✅ Always | `database/config.py` | MongoDB Atlas connection string |
+| `GROQ_API_KEY` | ✅ Always | All agents | LLM inference for profiling, ranking, analysis |
+| `SERPER_API_KEY` | ✅ Always | `search_pipeline/search.py` | Serper.dev shopping/organic search — required at startup |
+| `YOUTUBE_API_KEY` | ✅ Reviews | `agents/reviews/youtube_service.py` | YouTube video search |
+| `TAVILY_API_KEY` | ✅ Comparison | `agents/comparison/agent.py` | Deep web research for comparisons |
 
 **MongoDB collections used:**
-
 `products_raw`, `user_profiles`, `users`, `sessions`, `messages`, `api_cache`, `user_feedback`, `search_sessions`, `search_history`
 
 ---
 
-## System Flows
+## 🌍 Multilingual Support
+
+The system is built for a bilingual audience with deep support for **English** and **Arabic**.
+
+- **UI Language Toggle** — Switch languages from the navigation bar with instant layout reflow
+- **Full RTL Layout** — Arabic mode flips the entire interface direction, including all components
+- **Multilingual Embeddings** — `multilingual-e5-small` supports semantic retrieval in both languages natively
+- **Bilingual LLM Prompts** — All agents are instructed to match the user's preferred language in every response
+- **Cross-language Search** — The search pipeline handles queries and extracts product data regardless of input language
+
+---
+
+## 🔄 System Flows
 
 ### Auth & Session Setup
 
 1. Client creates a guest user via `POST /users/guest` or registers/logs in via `/auth/*`
 2. Backend stores or updates the user in MongoDB
 3. The returned `user_id` is included in all subsequent requests
-4. **Note:** No JWT/token layer exists yet — the API trusts the supplied `user_id` directly
+4. `session_id` tracks agent state and message history across all turns
 
 ### Recommendation Flow
 
 ```
 POST /recommendation/start
-  → ProfileAgent extracts structured UserProfile (Groq)
-  → profile_adapter converts profile to recommendation fields
-  → RecommendationAgent builds BM25 + semantic query
-  → BM25Index retrieves candidates from products_raw
-  → ProductScorer scores by semantic similarity + price fit
-  → LLMReranker selects best candidates (Groq)
-  → Diversity filter applied → top results returned
-  → Session + messages persisted to MongoDB
+  → ProfileAgent        extracts structured UserProfile (Groq)
+  → profile_adapter     converts profile to retrieval fields
+  → RecommendationAgent builds hybrid BM25 + semantic query
+  → BM25Index           retrieves candidates from products_raw
+  → ProductScorer       ranks by semantic similarity + price fit
+  → LLMReranker         selects top N candidates (Groq)
+  → Diversity filter    applied before returning results
+  → Session + messages  persisted to MongoDB
 ```
 
 ### Recommendation Chat Refinement
@@ -355,10 +337,9 @@ POST /recommendation/start
 POST /recommendation/chat
   → RecommendationIntentRouter classifies intent (Groq)
       budget refinement | preference change | brand filter
-      | explanation | general Q&A | new search
-  → Reruns recommendations, filters results, answers inline,
-    or opens a new session
-  → Updated state and messages persisted
+      | explanation request | general Q&A | new search
+  → Reruns retrieval / filters results / answers inline / opens new session
+  → Updated state and messages persisted to MongoDB
 ```
 
 ### Live Search Flow
@@ -369,9 +350,8 @@ POST /search/
   → Normalized query checked against 10-min memory cache
   → Cache miss → SearchPipeline runs:
       Serper shopping search
-      → organic fallback if empty
-      → Groq extraction
-      → cleaning + deduplication + ranking
+      → organic fallback if results are empty
+      → Groq extraction → cleaning + deduplication + ranking
   → Results cached in memory
   → Search session + history persisted to MongoDB
 ```
@@ -380,13 +360,12 @@ POST /search/
 
 ```
 POST /comparison/start
-  → ComparisonAgent parses two product names
+  → ComparisonAgent parses two product names from prompt
   → Shared extractor normalizes noisy titles
   → Tavily searches for comparison pages
-  → Requests + Playwright fetch page content
-  → BeautifulSoup cleans text
+  → Requests + Playwright fetch and clean page content
   → Groq generates structured comparison JSON
-  → Result + state persisted; follow-ups use stored page context
+  → Result + state persisted; follow-ups reuse stored page context
 ```
 
 ### Review Flow
@@ -396,7 +375,7 @@ POST /review/start
   → ReviewAgent extracts + cleans product name
   → YouTube Data API searches for review videos
   → youtube-transcript-api fetches transcripts
-  → Groq analyzes transcripts → JSON summary
+  → Groq analyzes transcripts → structured JSON summary
       (summary, sentiment, pros, cons, value, insights, best-for)
   → Result + state persisted; follow-ups use stored review data
 ```
@@ -404,8 +383,8 @@ POST /review/start
 ### Product Ingestion Flow
 
 ```
-scrapers/* collect raw product records
-  → Data_Base/ingestion.py validates required fields
+backend/scrapers/* collect raw product records
+  → backend/database/ingestion.py validates required fields
   → tools/product_classifier.py classifies product type
   → SentenceTransformers generates embeddings (new records only)
   → MongoDB upserts by normalized product.link
@@ -414,100 +393,88 @@ scrapers/* collect raw product records
 
 ---
 
-## Agents & Core Logic
+## 🧠 Agents & Core Logic
 
-### Profile Agent
+### 👤 Profile Agent — `backend/agents/profile/`
 
-**Location:** `agents/profile/`
-
-Converts a free-form shopping request into a fully structured `UserProfile`. Uses `llama-3.3-70b-versatile` via `langchain-groq` with a `PydanticOutputParser`. Missing details are inferred — the model does not ask follow-up questions.
+Converts a free-form shopping request into a fully structured `UserProfile` using `llama-3.3-70b-versatile` via `langchain-groq` with a `PydanticOutputParser`. Missing details are inferred — the model does not ask follow-up questions.
 
 ```python
 run_profile_agent(user_input: str, history: list | None, current_profile: UserProfile | None)
 # → ProfileAgentOutput
 ```
 
-### Recommendation Agent
-
-**Location:** `agents/recommendation/`
+### 🏆 Recommendation Agent — `backend/agents/recommendation/`
 
 Recommends products from MongoDB using an adapted profile. Builds semantic and BM25 query text, retrieves candidates, scores by semantic similarity and price fit, then LLM-reranks with Groq. Applies diversity filtering before returning results.
 
 ```python
 RecommendationAgent(user_id).recommend(profile: dict, top_k: int = 4)
-# → List of product dicts with title, price, link, scores
+# → List of product dicts with title, price, link, semantic_score, price_score, final_score
 ```
 
 > Requires products in `products_raw` with `product.embedding` populated.
 
-### Recommendation Chat Handler & Intent Router
-
-**Location:** `agents/recommendation/chat_handler.py`, `intent_router.py`
+### 💬 Recommendation Chat Handler & Intent Router — `backend/agents/recommendation/`
 
 Interprets follow-up messages and routes to the correct handling path:
 
 | Intent | Action |
 |---|---|
-| Budget / preference / brand change | Reruns `RecommendationAgent` |
+| Budget / preference / brand change | Reruns `RecommendationAgent` with updated profile |
 | Explanation request | Answers from conversation context |
 | General question | Answers with Groq + history |
 | New product search | Opens a fresh session |
 
-### Search Pipeline
-
-**Location:** `search_pipeline/`
+### 🔍 Search Pipeline — `backend/search_pipeline/`
 
 Stateless live product search, independent of the local product database. Runs Serper shopping search → organic fallback → Groq extraction → cleaning → lexical ranking.
 
 ```python
 SearchPipeline().run(query="gaming laptop", search_limit=10, top_k=5)
-# → Canonical product list with rank, title, price, link, source, scores
+# → Canonical product list with rank, title, price, link, source, relevance_score
 ```
 
-### Comparison Agent
+### ⚖️ Comparison Agent — `backend/agents/comparison/`
 
-**Location:** `agents/comparison/agent.py`
+Parses two products from a prompt like `"iphone 15 vs galaxy s24"`, normalizes names via shared extractor, searches Tavily, fetches and cleans web pages with Requests + Playwright, then generates a structured Groq comparison. Supports follow-up Q&A via `to_state()` / `from_state()`.
 
-Parses two products from a prompt like `"iphone 15 vs galaxy s24"`, normalizes names, searches Tavily, fetches and cleans web pages, then generates a structured Groq comparison. Supports follow-up Q&A from stored page context via `to_state()` / `from_state()`.
+### 🎬 Review Agent — `backend/agents/reviews/`
 
-### Review Agent
+Parses a review request, searches YouTube via the Data API, fetches video transcripts, and uses Groq to produce a JSON review summary covering sentiment score, pros, cons, value-for-money, insights, and best-fit use cases. Stateful — supports follow-up questions from stored review data.
 
-**Location:** `agents/reviews/`
+### 🧹 Shared Product Name Extractor — `backend/agents/shared/product_name_extractor.py`
 
-Parses a review request, searches YouTube, fetches video transcripts, and uses Groq to produce a JSON review summary (sentiment score, pros, cons, value-for-money, insights, best-fit). Stateful — supports follow-up questions from stored review data.
-
-### Shared Product Name Extractor
-
-**Location:** `agents/shared/product_name_extractor.py`
-
-Cleans noisy e-commerce titles into concise product names. Uses Groq when available; falls back to rule-based cleaning. Used by the comparison agent, review agent, and YouTube service.
+Cleans noisy e-commerce titles into concise product names. Uses Groq when available; falls back to rule-based cleaning. Shared across the comparison agent, review agent, and YouTube service.
 
 ---
 
-## API Reference
+## 📡 API Reference
 
 ### Endpoint Summary
 
-| Method | Path | Purpose |
+| Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/` | Health check |
-| `POST` | `/users/guest` | Create a guest user |
-| `POST` | `/auth/register` | Register with email/password |
-| `POST` | `/auth/login` | Login with email/password |
-| `GET` | `/auth/me?user_id=...` | Fetch current user identity |
-| `POST` | `/recommendation/start` | Start recommendation session |
-| `POST` | `/recommendation/chat` | Continue recommendation session |
-| `POST` | `/comparison/start` | Start comparison session |
-| `POST` | `/comparison/chat` | Continue comparison session |
-| `POST` | `/review/start` | Start review session |
-| `POST` | `/review/chat` | Continue review session |
+| `POST` | `/users/guest` | Create an anonymous guest user |
+| `POST` | `/auth/register` | Register with email + password |
+| `POST` | `/auth/login` | Login with email + password |
+| `GET` | `/auth/me?user_id=...` | Get current user identity |
+| `POST` | `/recommendation/start` | Start a recommendation session |
+| `POST` | `/recommendation/chat` | Continue a recommendation session |
+| `POST` | `/comparison/start` | Start a comparison session |
+| `POST` | `/comparison/chat` | Continue a comparison session |
+| `POST` | `/review/start` | Start a review analysis session |
+| `POST` | `/review/chat` | Continue a review session |
 | `POST` | `/search/` | Stateless live product search |
-| `GET` | `/sessions/?user_id=...` | List user sessions |
-| `GET` | `/sessions/{session_id}` | Get session with agent state |
-| `GET` | `/sessions/{session_id}/messages` | Get session messages |
+| `GET` | `/sessions/?user_id=...` | List all sessions for a user |
+| `GET` | `/sessions/{session_id}` | Get session with full agent state |
+| `GET` | `/sessions/{session_id}/messages` | Get session message history |
 | `POST` | `/sessions/{session_id}/close` | Close a session |
 
-All stateful flows return a consistent envelope:
+### Response Envelope
+
+All stateful endpoints return a consistent structure:
 
 ```json
 {
@@ -519,16 +486,14 @@ All stateful flows return a consistent envelope:
 }
 ```
 
----
+<details>
+<summary><strong>📬 Request & Response Examples (click to expand)</strong></summary>
 
-### Auth Examples
-
-**Create guest user**
+#### Create Guest User
 
 ```http
 POST /users/guest
 ```
-
 ```json
 {
   "status": "success",
@@ -536,7 +501,9 @@ POST /users/guest
 }
 ```
 
-**Register**
+---
+
+#### Register
 
 ```http
 POST /auth/register
@@ -551,9 +518,7 @@ Content-Type: application/json
 
 ---
 
-### Recommendation Examples
-
-**Start session**
+#### Start Recommendation Session
 
 ```http
 POST /recommendation/start
@@ -586,7 +551,7 @@ Content-Type: application/json
 }
 ```
 
-**Chat follow-up**
+#### Chat Follow-up
 
 ```http
 POST /recommendation/chat
@@ -599,11 +564,11 @@ Content-Type: application/json
 }
 ```
 
-Possible response types: `recommendations` (updated products), `message` (explanation), `reset` (new session created).
+Response `type` will be one of: `recommendations` (updated list), `message` (clarification), or `reset` (new session created).
 
 ---
 
-### Search Example
+#### Live Product Search
 
 ```http
 POST /search/
@@ -637,7 +602,7 @@ Content-Type: application/json
 
 ---
 
-### Comparison Example
+#### Start Comparison Session
 
 ```http
 POST /comparison/start
@@ -661,8 +626,8 @@ Content-Type: application/json
     ],
     "key_differences": ["..."],
     "recommendation": {
-      "product_1": ["Choose for iOS ecosystem"],
-      "product_2": ["Choose for Android flexibility"]
+      "product_1": ["Best for iOS ecosystem users"],
+      "product_2": ["Best for Android flexibility"]
     },
     "sources": [{ "url": "https://example.com/comparison" }]
   }
@@ -671,7 +636,7 @@ Content-Type: application/json
 
 ---
 
-### Rate Limit Error Shape
+#### Rate Limit Error
 
 ```json
 {
@@ -681,140 +646,148 @@ Content-Type: application/json
 }
 ```
 
+</details>
+
 ---
 
-## Development Guide
+## 🧪 Testing
 
-### Adding a New Backend Feature
-
-1. Add request/response schemas in `backend/app/schemas/`
-2. Add the HTTP route in `backend/app/routes/`
-3. Put orchestration logic in `backend/app/services/`
-4. Keep direct MongoDB calls inside `Data_Base/*_repo.py`
-5. Register the router in `backend/app/main.py`
-6. Add tests under `backend/app/tests/`
-7. Add an API client function in `ui_streamlit/services/api_client.py`
-
-### Adding a New Stateful Agent
-
-1. Implement the agent under `agents/<agent_name>/`
-2. Provide `to_state()` / `from_state()` for follow-up chat continuity
-3. Use `session_service` for all message and state persistence
-4. Return consistent envelopes: `status`, `type`, `message`, `session_id`, `data`
-5. Add rate limits in the service layer; cache deterministic calls with `cache_service`
-
-### For Frontend Developers
-
-There is no production frontend in this repository. Use `ui_streamlit/services/api_client.py` as the living API call reference.
-
-**Integration rules:**
-- Create/authenticate a user first and store `user_id`
-- Store `session_id` for all stateful flows
-- Use `/*/start` to open sessions; `/*/chat` for follow-ups
-- Use `/sessions/` endpoints to build history and restore sessions
-
-**Before deploying a browser frontend, add:**
-- CORS middleware to `backend/app/main.py`
-- A proper authentication layer (JWT/session cookies) — the current API trusts `user_id` directly
-
-### Adding a New Product Source
-
-1. Add a scraper module under `scrapers/`
-2. Implement `get_all_products()`, `get_product_extra_info()`, and `normalize_product()`
-3. Build records using `scrapers/base.py`
-4. Ingest via `Data_Base/ingestion.py`
-5. Ensure product links are stable and unique
-6. Verify records include enough `details_text` for embedding quality
-
-### Before Committing
-
-```powershell
+**Run backend unit tests:**
+```bash
 python -m unittest discover backend/app/tests
-python search_pipeline/test_pipeline.py
+```
+
+> Some tests import modules that construct API clients at import time. Keep `.env` populated, or set dummy keys when running tests that mock network calls.
+
+**Standalone search pipeline tests:**
+```bash
+# Smoke tests
+python backend/search_pipeline/test_pipeline.py
+
+# Live test with a custom query
+python backend/search_pipeline/test_pipeline.py --live --query "best gaming laptop under 1500"
 ```
 
 ---
 
-## Known Limitations
+## 🧑‍💻 Development Guide
+
+### Adding a Backend Feature
+
+1. Define schemas in `backend/app/schemas/`
+2. Add the HTTP route in `backend/app/routes/`
+3. Place orchestration logic in `backend/app/services/`
+4. Keep all direct MongoDB calls inside `backend/database/*_repo.py`
+5. Register the router in `backend/app/main.py`
+6. Write tests under `backend/app/tests/`
+
+### Adding a Stateful Agent
+
+1. Implement the agent under `backend/agents/<agent_name>/`
+2. Implement `to_state()` and `from_state()` for multi-turn continuity
+3. Use `session_service` for all message and state persistence
+4. Return consistent envelopes: `status`, `type`, `message`, `session_id`, `data`
+5. Add rate limiting in the service layer; cache deterministic calls via `cache_service`
+
+### Frontend Integration Rules
+
+- Always create/authenticate a user first and store `user_id`
+- Store `session_id` for all stateful flows
+- Use `/*/start` to open new sessions; `/*/chat` for follow-ups
+- Use `/sessions/` endpoints to build history and restore sessions
+- Primary API reference: `frontend/src/services/api.ts`
+
+### Adding a Product Source
+
+1. Create a scraper module under `backend/scrapers/`
+2. Implement `get_all_products()`, `get_product_extra_info()`, and `normalize_product()`
+3. Build records using `backend/scrapers/base.py`
+4. Run ingestion via `backend/database/ingestion.py`
+5. Ensure product links are stable and globally unique
+6. Verify records include enough `details_text` for embedding quality
+
+### Before Committing
+
+```bash
+python -m unittest discover backend/app/tests
+python backend/search_pipeline/test_pipeline.py
+```
+
+---
+
+## ⚠️ Known Limitations
 
 | Area | Limitation |
 |---|---|
 | **Auth** | No JWT/session cookie layer — backend trusts `user_id` directly |
-| **CORS** | Not configured — browser frontends on another origin will fail |
 | **Rate limiting** | In-memory only — resets on restart, not shared across workers |
 | **Search cache** | In-memory only — not shared across processes |
 | **Recommendations** | Requires pre-ingested `products_raw` with embeddings — empty DB = no results |
-| **Reranker** | Receives mostly title/price; some detail fields dropped before `LLMReranker` |
+| **Reranker** | Receives mostly title/price; some detail fields are dropped before `LLMReranker` |
 | **Backend startup** | `SearchPipeline()` instantiated at import time — missing `SERPER_API_KEY` breaks startup even if `/search/` is unused |
-| **Case sensitivity** | Legacy files import `Data_base`; folder is `Data_Base` — fails on Linux/macOS |
-| **Scrapers** | Hardcoded Brave path; 1-page limit; imports `Data_base` (case bug) |
+| **Scrapers** | Hardcoded browser path; may have casing issues on Linux/macOS |
 | **Product classifier** | Phrase-keyword matching may miss multi-word categories |
-| **Comparison** | Depends on public web pages — may fail on blocked or dynamic sites |
-| **Reviews** | Skips videos without English transcripts |
-| **LLM parsing** | Defensive but still depends on model returning valid JSON |
+| **Comparison** | Depends on public web pages — may fail on blocked or JavaScript-rendered sites |
+| **Reviews** | Skips videos without available transcripts |
+| **LLM parsing** | Defensive but still depends on the model returning valid JSON |
 | **Migrations** | No formal migration system for Mongo indexes or schema changes |
+| **Deployment** | Optimized for local development — containerization is on the roadmap |
 
 ---
 
-## Troubleshooting
+## 🔮 Roadmap
 
-### `Missing MONGO_URI_CLOUD`
+- [ ] **Docker Compose** — One-command setup for backend, frontend, and database
+- [ ] **JWT Authentication** — Secure, token-based auth with refresh support
+- [ ] **Cloud Deployment** — Scalable hosting on AWS / GCP / Azure
+- [ ] **Expanded Review Sources** — Blog reviews and forum discussions alongside YouTube
+- [ ] **More Store Integrations** — Additional regional and international e-commerce scrapers
+- [ ] **User Feedback Loop** — Thumbs up/down on recommendations to improve future results
 
-Add to `.env` and restart Uvicorn:
+---
 
+## 🛠 Troubleshooting
+
+### `Missing MONGO_URI_CLOUD` on startup
+Add your MongoDB Atlas connection string to `.env` and restart Uvicorn:
 ```env
 MONGO_URI_CLOUD=mongodb+srv://...
 ```
 
 ### `SERPER_API_KEY is required` on startup
-
-`search_service.py` creates `SearchPipeline()` at import time. Add the key and restart:
-
+`search_service.py` creates `SearchPipeline()` at import time. Add the key to `.env` and restart:
 ```env
 SERPER_API_KEY=...
 ```
 
-### Streamlit can't connect to backend
-
-Ensure the backend is running, then:
-
-```powershell
-uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
-$env:SHOPPING_ASSISTANT_BACKEND_URL = "http://127.0.0.1:8000"
-streamlit run ui_streamlit/app.py
-```
+### Frontend can't connect to backend
+Verify the backend is running on `http://127.0.0.1:8000` and that the frontend's API base URL in `frontend/src/services/api.ts` matches.
 
 ### Recommendations return empty results
-
-1. Check `products_raw` in MongoDB — is it populated?
-2. Confirm records have `product.title`, `product.price`, `product.link`, `product.details_text`, `product.product_type`, and `product.embedding`
-3. Run ingestion for a known product category
-4. Inspect `BM25Index.build()` and `BM25Index.search()` output directly
+1. Check that `products_raw` is populated in your MongoDB Atlas database
+2. Confirm documents have `product.title`, `product.price`, `product.link`, `product.details_text`, `product.product_type`, and `product.embedding`
+3. Run `backend/database/ingestion.py` to embed and upsert new records
+4. Inspect `BM25Index.build()` and `BM25Index.search()` output directly for debugging
 
 ### Playwright errors during comparison
-
-```powershell
+```bash
 python -m playwright install chromium
 ```
 
 ### `Could not fetch reviews`
+- Verify `YOUTUBE_API_KEY` is valid and quota has not been exceeded
+- Confirm that transcripts exist for the returned video IDs
+- Note: videos without available transcripts are skipped
 
-- Check `YOUTUBE_API_KEY` is valid and quota is not exceeded
-- Verify that transcripts exist for the returned video IDs
-- Note: only videos with English transcripts are processed
-
-### `ModuleNotFoundError: No module named 'Data_base'`
-
-Legacy scripts use `Data_base` instead of `Data_Base`. Use canonical backend imports, or fix the casing before running on case-sensitive (Linux/macOS) systems.
-
-### Selenium scraper won't start
-
-- Verify Brave is installed at `C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe`
-- Or update `create_brave_driver()` in `scrapers/base.py` to point to your browser
-- Run in visible browser mode for debugging
-
-### FAISS / Torch / Sentence Transformers install errors
-
-- Try Python 3.11 or 3.12 — some wheels are unavailable for Python 3.13
+### FAISS / Sentence Transformers install errors
+- Use Python 3.11 or 3.12 — some wheels are unavailable for Python 3.13
 - Recreate the virtual environment
 - Upgrade `pip` before installing: `pip install --upgrade pip`
+
+---
+
+<div align="center">
+
+Built as a graduation project · Powered by [Groq](https://groq.com) · [FastAPI](https://fastapi.tiangolo.com) · [React](https://react.dev) · [MongoDB Atlas](https://www.mongodb.com/atlas)
+
+</div>
