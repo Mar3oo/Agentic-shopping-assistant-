@@ -43,7 +43,7 @@ The system is backed by a **React + TypeScript** web interface with **full Engli
 
 ---
 
-## 🏗️ Architecture
+## 🏗 Architecture
 
 ```mermaid
 flowchart LR
