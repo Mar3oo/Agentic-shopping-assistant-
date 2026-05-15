@@ -1,7 +1,7 @@
 import hashlib
 import json
 
-from Data_Base.cache_repo import get_cache_entry, upsert_cache_entry
+from backend.database.cache_repo import get_cache_entry, upsert_cache_entry
 
 DEFAULT_TTLS = {
     "comparison": 24 * 60 * 60,

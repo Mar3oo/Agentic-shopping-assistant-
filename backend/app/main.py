@@ -6,7 +6,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from Data_Base.db import close_client, init_collections
+from backend.database.db import close_client, init_collections
 from backend.app.routes import comparison, recommendation, review, search
 from backend.app.routes.auth import router as auth_router
 from backend.app.routes.session import router as session_router
