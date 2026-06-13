@@ -169,6 +169,7 @@ class ReviewAgent:
         # merge into result
         if isinstance(result, dict):
             result["sources"] = sources
+            result["product_display_name"] = self.product
 
         # store
         self.query = query
@@ -176,6 +177,7 @@ class ReviewAgent:
         self.reviews_data = result
 
         return result
+
 
     def _generate_review_from_llm(self):
         prompt = f"""

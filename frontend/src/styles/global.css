@@ -2446,7 +2446,7 @@ h3, h4, .section-title { letter-spacing: var(--ls-tight); }
   transition: transform 0.2s ease, background 0.2s ease, opacity 0.2s ease;
   z-index: 1;
 }
-..chat-scroll-down:hover {
+.chat-scroll-down:hover {
   transform: translateY(-2px);
   background: var(--c-primary-500);
 }

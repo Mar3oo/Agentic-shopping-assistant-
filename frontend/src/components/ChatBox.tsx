@@ -3,6 +3,8 @@ import { useApp } from '../store/AppContext';
 import { useT } from '../i18n/translations';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, User, ArrowDownCircle, Sparkles } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { ChatMessage } from '../store/AppContext';
 
 interface Props {
@@ -20,6 +22,50 @@ const msgAnim = {
   animate: { opacity: 1, y: 0, scale: 1 },
   exit:    { opacity: 0, scale: 0.98 },
 };
+
+const LOADING_MESSAGES_EN = [
+  "Comparing specs like a shopping nerd...",
+  "Reading suspiciously long reviews...",
+  "Trying not to recommend bad products...",
+  "Arguing with the internet about the best option...",
+  "Summoning tech wisdom...",
+  "Checking for hidden deals...",
+  "Analyzing user sentiment (the drama)..."
+];
+
+const LOADING_MESSAGES_AR = [
+  "بنشوف المواصفات واحدة واحدة...",
+  "بنقرأ المراجعات الطويلة عشان نوفر عليك...",
+  "بنحاول ما نرشحلكش حاجة وحشة 😅",
+  "بنتخانق مع الإنترنت على أفضل اختيار...",
+  "بنجيب الحكمة التقنية حالًا...",
+  "بندور على عروض مستخبية...",
+  "بنحلل آراء الناس (كلام كتير)..."
+];
+
+function PlayfulLoading({ lang }: { lang: string }) {
+  const [index, setIndex] = useState(0);
+  const messages = lang === 'ar' ? LOADING_MESSAGES_AR : LOADING_MESSAGES_EN;
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setIndex(prev => (prev + 1) % messages.length);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [messages.length]);
+
+  return (
+    <motion.div 
+      key={index}
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -5 }}
+      className="loading-message-text"
+    >
+      {messages[index]}
+    </motion.div>
+  );
+}
 
 export default function ChatBox({ messages, onSend, placeholder, loading = false, emptyText, disabled = false, renderPayload }: Props) {
   const { state } = useApp();
@@ -85,7 +131,13 @@ export default function ChatBox({ messages, onSend, placeholder, loading = false
                 </div>
                 
                 <div className="msg-content">
-                  {msg.content && <p className="text-content">{msg.content}</p>}
+                  {msg.content && (
+                    <div className="text-content prose prose-sm dark:prose-invert max-w-none">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  )}
                   
                   {msg.payload && renderPayload && (
                     <div className="payload-content">
@@ -105,12 +157,21 @@ export default function ChatBox({ messages, onSend, placeholder, loading = false
                 <div className="msg-icon bot"><Sparkles size={12} /></div>
                 <span className="msg-role-name">RECO</span>
               </div>
-              <div className="typing-dots">
-                <span className="dot" /><span className="dot" /><span className="dot" />
+              <div className="typing-container">
+                <div className="typing-dots">
+                  <span className="dot" /><span className="dot" /><span className="dot" />
+                </div>
+                <div className="loading-message-wrapper">
+                  <AnimatePresence mode="wait">
+                    <PlayfulLoading lang={state.lang} />
+                  </AnimatePresence>
+                </div>
               </div>
+              <div className="skeleton-placeholder-block mt-4" />
             </motion.div>
           </div>
         )}
+
         
         <div ref={bottomRef} className="chat-bottom-anchor" />
       </div>
@@ -161,4 +222,5 @@ export default function ChatBox({ messages, onSend, placeholder, loading = false
     </div>
   );
 }
+
 

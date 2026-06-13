@@ -47,7 +47,7 @@ FORMAT:
   "sentiment_score": "positive / neutral / negative",
   "pros": ["...", "...", "..."],
   "cons": ["...", "..."],
-  "value_for_money": "short statement",
+  "value_for_money": "Extremely concise (1-4 words only, e.g., 'Excellent Value' or 'Great for Price')",
   "insights": ["...", "..."],
   "best_for": ["...", "..."]
 }}
@@ -55,7 +55,8 @@ FORMAT:
 RULES:
 - No markdown
 - No extra text
-- Keep it concise
+- Keep summary and insights concise
+- value_for_money MUST be between 1 to 4 words only. No long sentences.
 - Match the requested response language for summary, sentiment_score, pros, cons, value_for_money, insights, and best_for
 """
 

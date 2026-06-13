@@ -50,6 +50,7 @@ export default function RecommendationPage() {
   };
 
   const handleChat = async (msg: string) => {
+    const userMsg: ChatMessage = { role: 'user', content: msg };
     setChatLoad(true); setError('');
     try {
       if (!state.recommendationSessionId) {
@@ -58,13 +59,33 @@ export default function RecommendationPage() {
         if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
         applyResp(msg, res, true);
       } else {
+        // Immediate user feedback
+        dispatch({ type: 'APPEND_MSG', payload: { agent: 'recommendation', msg: userMsg } });
+        
         const res: any = await chatRecommendation(state.userId!, state.recommendationSessionId, msg, state.lang);
         if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
-        applyResp(msg, res);
+        
+        // Assistant response
+        dispatch({ type: 'APPEND_MSG', payload: { agent: 'recommendation', msg: { role: 'assistant', content: res.message || '', payload: res } } });
+        
+        if (res.session_id) {
+          dispatch({ type:'SET_RECOMMENDATION', payload:{ recommendationSessionId: res.session_id }});
+          dispatch({ type:'SET_ACTIVE_SESSION', payload: res.session_id });
+        }
+        
+        // Update products/suggestions if any
+        if (res.type === 'recommendations') {
+          dispatch({ type: 'SET_RECOMMENDATION', payload: {
+            recommendationProducts: res.data?.products || state.recommendationProducts,
+            recommendationSuggestions: res.data?.suggestions || state.recommendationSuggestions,
+          }});
+        }
       }
     } catch(e) { setError(e instanceof ApiClientError ? e.message : String(e)); }
     finally { setChatLoad(false); }
   };
+
+
 
   const handleCompare = async () => {
     if (selComp.length !== 2) return;
@@ -101,16 +122,17 @@ export default function RecommendationPage() {
   const titles   = products.map(p => p.title || '');
 
   const renderRecommendationPayload = (payload: any) => {
-    if (payload.type === 'recommendations' && payload.data?.products) {
+    const products = payload.data?.products || payload.products;
+    if (payload.type === 'recommendations' && products) {
       return (
         <div className="inline-payload-wrapper">
-          <ProductCards products={payload.data.products} />
+          <ProductCards products={products} />
           
-          <div className="payload-actions-row mt-4">
-            <button className="btn btn-sm btn-outline" onClick={() => setShowCompareModal(true)}>
+          <div className="payload-actions-row">
+            <button className="btn btn-sm btn-outline px-5 py-2.5 shadow-sm hover:shadow-md" onClick={() => setShowCompareModal(true)}>
               <LayoutGrid size={13} /> {t('compareProducts')}
             </button>
-            <button className="btn btn-sm btn-outline" onClick={() => setShowReviewModal(true)}>
+            <button className="btn btn-sm btn-outline px-5 py-2.5 shadow-sm hover:shadow-md" onClick={() => setShowReviewModal(true)}>
               <Star size={13} /> {t('reviewProduct')}
             </button>
           </div>
@@ -119,6 +141,8 @@ export default function RecommendationPage() {
     }
     return null;
   };
+
+
 
   return (
     <div className="page-wrapper conversational-page">
@@ -160,17 +184,20 @@ export default function RecommendationPage() {
                 <button className="btn-icon" onClick={closeModals}><X size={16} /></button>
               </div>
               <div className="pick-list" style={{ maxHeight:320, overflowY:'auto', marginBottom:18 }}>
-                {titles.map(title => {
+                {products.map(p => {
+                  const title = p.title || '';
+                  const clean = p.display_name || title;
                   const sel = selComp.includes(title);
                   return (
                     <div key={title} className={`pick-item ${sel ? 'sel' : ''}`}
                       onClick={() => setSelComp(prev => sel ? prev.filter(t => t !== title) : prev.length < 2 ? [...prev, title] : prev)}>
                       <span className="pick-box">{sel && <svg width="9" height="8" viewBox="0 0 9 8"><polyline points="1,4 3.5,6.5 8,1" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>}</span>
-                      <span className="pick-label">{title}</span>
+                      <span className="pick-label">{clean}</span>
                     </div>
                   );
                 })}
               </div>
+
               <div style={{ display:'flex', gap:12, flexWrap:'wrap', alignItems:'center' }}>
                 <button className="btn btn-primary btn-full" type="button" onClick={() => { handleCompare(); closeModals(); }} disabled={selComp.length !== 2}>
                   <LayoutGrid size={14} /> {t('compareSelected')}
@@ -196,16 +223,19 @@ export default function RecommendationPage() {
                 <button className="btn-icon" onClick={closeModals}><X size={16} /></button>
               </div>
               <div className="pick-list" style={{ maxHeight:320, overflowY:'auto', marginBottom:18 }}>
-                {titles.map(title => {
-                  const sel = (selRev || titles[0]) === title;
+                {products.map(p => {
+                  const title = p.title || '';
+                  const clean = p.display_name || title;
+                  const sel = (selRev || products[0]?.title) === title;
                   return (
                     <div key={title} className={`pick-item ${sel ? 'sel' : ''}`} onClick={() => setSelRev(title)}>
                       <span className="pick-radio-btn" />
-                      <span className="pick-label">{title}</span>
+                      <span className="pick-label">{clean}</span>
                     </div>
                   );
                 })}
               </div>
+
               <div style={{ display:'flex', gap:12, alignItems:'center' }}>
                 <button className="btn btn-primary btn-full" type="button" onClick={() => { handleReview(); closeModals(); }}>
                   <Star size={14} /> {t('startReview')}

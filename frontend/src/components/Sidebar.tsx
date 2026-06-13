@@ -20,13 +20,31 @@ const NAV: Array<{ key: Page; icon: React.ElementType; en: string; ar: string }>
 
 const ICON_RAIL_W = 52; // width of collapsed icon rail
 
-function normalizeMessages(rawMsgs: Array<Record<string, unknown>>): ChatMessage[] {
-  return rawMsgs.map(m => ({
-    role: m.role === 'user' ? 'user' as const : 'assistant' as const,
-    content: String(m.content || ''),
-    payload: m.payload as Record<string, unknown> | undefined,
-  }));
+function normalizeMessages(rawMsgs: Array<Record<string, unknown>>, agentType: string): ChatMessage[] {
+  return rawMsgs.map(m => {
+    const role = m.role === 'user' ? 'user' as const : 'assistant' as const;
+    let payload = m.payload as Record<string, unknown> | undefined;
+    
+    // Robustness: ensure payload has a 'type' if it's an assistant message
+    // This fixes history persistence where raw data was stored without a type wrapper
+    if (role === 'assistant' && payload && !payload.type) {
+      if (agentType === 'comparison') {
+        payload = { ...payload, type: (payload.comparison && payload.feature) ? 'feature_answer' : 'comparison' };
+      } else if (agentType === 'review') {
+        payload = { ...payload, type: 'review' };
+      } else if (agentType === 'recommendation') {
+        payload = { ...payload, type: 'recommendations' };
+      }
+    }
+    
+    return {
+      role,
+      content: String(m.content || ''),
+      payload,
+    };
+  });
 }
+
 
 function lastAssistantPayload(messages: ChatMessage[]): unknown {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -82,7 +100,8 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen?: boolean;
       const agentType = sesData.agent_type as string;
       const agentState = (sesData.agent_state as Record<string, unknown>) || {};
       const rawMsgs = ((msgRes as any).data?.messages as Array<Record<string, unknown>>) || [];
-      const messages = normalizeMessages(rawMsgs);
+      const messages = normalizeMessages(rawMsgs, agentType);
+
       const lastPayloadData = payloadData(lastAssistantPayload(messages)) as any;
       dispatch({ type: 'SET_ACTIVE_SESSION', payload: sid });
       if (agentType === 'recommendation') {

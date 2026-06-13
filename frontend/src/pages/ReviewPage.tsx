@@ -11,48 +11,86 @@ function ReviewResult({ result }: { result: any }) {
   const t = useT(state.lang);
 
   if (!result) return <div className="no-data">{t('noReviewData')}</div>;
-  if (typeof result === 'string') return <p className="result-summary" style={{ fontSize:'var(--text-sm)' }}>{result}</p>;
+  if (typeof result === 'string') {
+    return (
+      <div className="review-summary-container">
+        <p className="review-summary-text">{result}</p>
+      </div>
+    );
+  }
 
-  // data might be nested or direct
-  const data = result.data || result;
+  // Robustly extract data - might be wrapped in .data or direct
+  const data = (result.data || result) as any;
   const { 
     summary, sentiment_score, value_for_money, 
-    pros, cons, insights, best_for, sources 
+    pros, cons, insights, best_for, sources,
+    product_display_name
   } = data;
+
+
+  const sentimentClass = (score: string) => {
+    const s = score?.toLowerCase() || '';
+    if (s.includes('positive') || s.includes('good') || s.includes('great')) return 'sentiment-positive';
+    if (s.includes('negative') || s.includes('bad') || s.includes('poor')) return 'sentiment-negative';
+    return 'sentiment-neutral';
+  };
 
   return (
     <div className="review-result-inline">
+      {product_display_name && (
+        <div className="review-product-header">
+          <h2 className="review-product-name">{product_display_name}</h2>
+        </div>
+      )}
+
       {(sentiment_score || value_for_money) && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:20 }}>
+        <div className="review-metrics-grid">
           {sentiment_score && (
-            <div className="sentiment-row" style={{ marginBottom:0, padding:'10px 14px' }}>
-              <span className="sentiment-label" style={{ fontSize:'11px' }}><TrendingUp size={12} style={{ display:'inline', marginRight:6 }}/>{t('sentiment')}</span>
-              <span className="sentiment-value" style={{ fontSize:'16px' }}>{sentiment_score}</span>
+            <div className={`review-metric-card sentiment-card ${sentimentClass(sentiment_score)}`}>
+              <div className="metric-label-row">
+                <span className="metric-label">{t('sentiment')}</span>
+              </div>
+              <span className="metric-value">{sentiment_score}</span>
             </div>
           )}
           {value_for_money && (
-            <div className="sentiment-row" style={{ marginBottom:0, padding:'10px 14px', '--c-primary-50':'var(--c-success-bg)', '--c-primary-200':'rgba(5,150,105,.2)', '--c-primary-600':'var(--c-success)' } as any}>
-              <span className="sentiment-label" style={{ fontSize:'11px' }}>💰 {t('valueForMoney')}</span>
-              <span className="sentiment-value" style={{ fontSize:'16px' }}>{value_for_money}</span>
+            <div className="review-metric-card value-card">
+              <div className="metric-label-row">
+                <span className="metric-label">{t('valueForMoney')}</span>
+              </div>
+              <span className="metric-value">{value_for_money}</span>
             </div>
           )}
         </div>
       )}
 
-      {summary && <p className="result-summary" style={{ fontSize: 'var(--text-sm)', marginBottom: 20 }}>{summary}</p>}
+
+      {summary && (
+        <div className="review-summary-container">
+          <p className="review-summary-text">{summary}</p>
+        </div>
+      )}
 
       {(Array.isArray(pros) && pros.length > 0 || Array.isArray(cons) && cons.length > 0) && (
-        <div className="pros-cons-grid" style={{ marginBottom: 20 }}>
+        <div className="pros-cons-grid">
           {Array.isArray(pros) && pros.length > 0 && (
-            <div className="pros-box" style={{ padding: '12px' }}>
-              <div className="result-box-title" style={{ fontSize: '11px' }}><ThumbsUp size={12} /> {t('pros')}</div>
-              <div className="result-list">{pros.map((p:string,i:number)=><div key={i} className="result-list-item" style={{ fontSize:'11px' }}>{p}</div>)}</div>
+            <div className="pros-box shadow-sm">
+              <div className="result-box-title"><ThumbsUp size={16} /> {t('pros')}</div>
+              <div className="result-list mt-1">
+                {pros.map((p:string, i:number) => (
+                  <div key={i} className="result-list-item">{p}</div>
+                ))}
+              </div>
             </div>
           )}
           {Array.isArray(cons) && cons.length > 0 && (
-            <div className="cons-box" style={{ padding: '12px' }}>
-              <div className="result-box-title" style={{ fontSize: '11px' }}><ThumbsDown size={12} /> {t('cons')}</div>
-              <div className="result-list">{cons.map((c:string,i:number)=><div key={i} className="result-list-item" style={{ fontSize:'11px' }}>{c}</div>)}</div>
+            <div className="cons-box shadow-sm">
+              <div className="result-box-title"><ThumbsDown size={16} /> {t('cons')}</div>
+              <div className="result-list mt-1">
+                {cons.map((c:string, i:number) => (
+                  <div key={i} className="result-list-item">{c}</div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -60,35 +98,48 @@ function ReviewResult({ result }: { result: any }) {
 
       {Array.isArray(insights) && insights.length > 0 && (
         <div className="result-section">
-          <div className="result-section-title" style={{ fontSize: '12px' }}><Lightbulb size={12} /> {t('insights')}</div>
-          <div className="result-list">{insights.map((x:string,i:number)=>(
-            <div key={i} className="result-list-item" style={{ fontSize:'11px' }}>{x}</div>
-          ))}</div>
+          <div className="result-section-title text-[var(--c-accent-2)]"><Lightbulb size={16} /> {t('insights')}</div>
+          <div className="result-list mt-3 gap-3">
+            {insights.map((x:string, i:number) => (
+              <div key={i} className="tapped-list-item">
+                {x}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {Array.isArray(best_for) && best_for.length > 0 && (
         <div className="result-section">
-          <div className="result-section-title" style={{ fontSize: '12px' }}><Target size={12} /> {t('bestFor')}</div>
-          <div className="result-list">{best_for.map((x:string,i:number)=>(
-            <div key={i} className="result-list-item" style={{ fontSize:'11px' }}>{x}</div>
-          ))}</div>
+          <div className="result-section-title text-[var(--c-primary-500)]"><Target size={16} /> {t('bestFor')}</div>
+          <div className="result-list mt-3 gap-3">
+            {best_for.map((x:string, i:number) => (
+              <div key={i} className="tapped-list-item">
+                {x}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
+
       {Array.isArray(sources) && sources.length > 0 && (
-        <div className="result-section">
-          <div className="result-section-title" style={{ fontSize: '12px' }}><Link size={12} /> {t('videoSources')}</div>
-          <div className="source-chips">
-            {sources.map((s:any,i:number)=>s.url
-              ? <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="source-chip" style={{ fontSize:'10px', padding:'4px 10px' }}><Link size={8} />{(s.title||`Source ${i+1}`).slice(0,30)}</a>
-              : <span key={i} className="source-chip" style={{ fontSize:'10px', padding:'4px 10px' }}>{String(s.title||s).slice(0,30)}</span>)}
+        <div className="review-sources-section">
+          <div className="result-section-title opacity-60"><Link size={14} /> {t('videoSources')}</div>
+          <div className="source-chips mt-4">
+            {sources.map((s:any, i:number) => (
+              <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="source-chip transition-all hover:scale-[1.02]">
+                <Link size={10} /> {(s.title || `Source ${i+1}`).slice(0, 45)}...
+              </a>
+            ))}
           </div>
         </div>
       )}
     </div>
   );
 }
+
+
 
 export default function ReviewPage() {
   const { state } = useApp();
@@ -98,6 +149,7 @@ export default function ReviewPage() {
   const [error,    setError]    = useState('');
 
   const handleChat = async (msg: string) => {
+    const userMsg: ChatMessage = { role: 'user', content: msg };
     setChatLoad(true); setError('');
     try {
       if (!state.reviewSessionId) {
@@ -110,8 +162,13 @@ export default function ReviewPage() {
         }});
         dispatch({ type:'SET_ACTIVE_SESSION', payload: res.session_id });
       } else {
+        // Immediate feedback: append user message locally
+        dispatch({ type: 'APPEND_MSG', payload: { agent: 'review', msg: userMsg } });
+        
         const res: any = await chatReview(state.userId!, state.reviewSessionId, msg, state.lang);
         if (res.status !== 'success') throw new ApiClientError(res.message || 'Failed');
+        
+        // Append assistant response
         dispatch({ type:'APPEND_MSG', payload:{ agent:'review', msg:{ role:'assistant', content:res.message||'', payload:res }}});
         if (res.session_id) dispatch({ type:'SET_ACTIVE_SESSION', payload: res.session_id });
       }
@@ -119,16 +176,18 @@ export default function ReviewPage() {
     finally { setChatLoad(false); }
   };
 
+
   const renderReviewPayload = (payload: any) => {
     if (payload.type === 'review' || payload.type === 'answer') {
       return (
-        <div className="inline-payload-wrapper glass-card p-4 md:p-6 mt-2 overflow-hidden">
+        <div className="inline-payload-wrapper glass-card p-6 md:p-10 mt-4 overflow-hidden">
           <ReviewResult result={payload.data || payload} />
         </div>
       );
     }
     return null;
   };
+
 
   return (
     <div className="page-wrapper conversational-page">

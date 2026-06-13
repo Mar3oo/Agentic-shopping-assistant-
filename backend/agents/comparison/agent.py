@@ -641,11 +641,19 @@ Products:
         self.search_queries = queries
         self.source_urls = links
         self.raw_contents = contents
-        self.comparison_result = result
 
-        # merge sources into result
+        # robust product labels
+        product_labels = {
+            "product_1": self.product_pairs[0]["product_clean"] if len(self.product_pairs) > 0 else "Product 1",
+            "product_2": self.product_pairs[1]["product_clean"] if len(self.product_pairs) > 1 else "Product 2",
+        }
+
+        # merge sources and labels into result
         if isinstance(result, dict):
             result.setdefault("products", self.product_pairs)
             result["sources"] = sources
+            result["product_labels"] = product_labels
 
+        self.comparison_result = result
         return result
+
