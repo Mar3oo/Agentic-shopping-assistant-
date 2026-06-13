@@ -6,10 +6,10 @@ from backend.agents.reviews.agent import ReviewAgent
 
 
 class ReviewProductNameTests(unittest.TestCase):
-    @patch("agents.reviews.agent.analyze_reviews")
-    @patch("agents.reviews.agent.get_transcripts_for_videos")
-    @patch("agents.reviews.agent.search_youtube")
-    @patch("agents.reviews.agent.extract_clean_product_name")
+    @patch("backend.agents.reviews.agent.analyze_reviews")
+    @patch("backend.agents.reviews.agent.get_transcripts_for_videos")
+    @patch("backend.agents.reviews.agent.search_youtube")
+    @patch("backend.agents.reviews.agent.extract_clean_product_name")
     def test_review_agent_uses_clean_name_for_youtube_query(
         self,
         mock_extract_clean_name,
@@ -39,13 +39,47 @@ class ReviewProductNameTests(unittest.TestCase):
         mock_analyze_reviews.assert_called_once_with(
             "HP EliteBook 845 G8",
             ["Great laptop review transcript"],
+            language="en",
         )
         self.assertEqual(result["summary"], "Solid business laptop")
+
+    @patch("backend.agents.reviews.agent.analyze_reviews")
+    @patch("backend.agents.reviews.agent.get_transcripts_for_videos")
+    @patch("backend.agents.reviews.agent.search_youtube")
+    @patch("backend.agents.reviews.agent.extract_clean_product_name")
+    def test_review_agent_passes_arabic_language_to_transcript_analysis(
+        self,
+        mock_extract_clean_name,
+        mock_search_youtube,
+        mock_get_transcripts,
+        mock_analyze_reviews,
+    ):
+        mock_extract_clean_name.return_value = "iPhone 17"
+        mock_search_youtube.return_value = [
+            {
+                "title": "Review video",
+                "video_id": "video_1",
+                "link": "https://youtube.com/watch?v=video_1",
+            }
+        ]
+        mock_get_transcripts.return_value = ["Detailed review transcript"]
+        mock_analyze_reviews.return_value = {"summary": "مراجعة عربية"}
+
+        agent = ReviewAgent()
+        result = agent.start_review("راجع iPhone 17", language="ar")
+
+        self.assertEqual(agent.language, "ar")
+        self.assertEqual(result["summary"], "مراجعة عربية")
+        mock_analyze_reviews.assert_called_once_with(
+            "iPhone 17",
+            ["Detailed review transcript"],
+            language="ar",
+        )
 
 
 class ComparisonProductNameTests(unittest.TestCase):
     @patch.object(ComparisonAgent, "run_comparison_pipeline", return_value={"summary": "Comparison ready"})
-    @patch("agents.comparison.agent.extract_clean_product_mappings")
+    @patch("backend.agents.comparison.agent.extract_clean_product_mappings")
     def test_comparison_agent_keeps_only_two_clean_products(
         self,
         mock_extract_mappings,
