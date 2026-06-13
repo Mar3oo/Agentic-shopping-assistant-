@@ -19,14 +19,12 @@ export default function RecommendationPage() {
   const { state } = useApp();
   const dispatch  = useDispatch();
   const t = useT(state.lang);
-  const [loading,  setLoading]  = useState(false);
   const [chatLoad, setChatLoad] = useState(false);
   const [error,    setError]    = useState('');
   const [selComp,  setSelComp]  = useState<string[]>([]);
   const [selRev,   setSelRev]   = useState('');
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
-  const resultsRef = useRef<HTMLDivElement>(null);
 
   const closeModals = () => {
     setShowCompareModal(false);
@@ -102,21 +100,28 @@ export default function RecommendationPage() {
   const products = state.recommendationProducts;
   const titles   = products.map(p => p.title || '');
 
-  useEffect(() => {
-    if (products.length > 0) {
-      const el = resultsRef.current;
-      if (el) {
-        const header = document.querySelector('.page-header-row') as HTMLElement | null;
-        const headerHeight = header ? header.getBoundingClientRect().height : 0;
-        const padding = 20;
-        const top = el.getBoundingClientRect().top + window.scrollY - headerHeight - padding;
-        window.scrollTo({ top: top > 0 ? top : 0, behavior: 'smooth' });
-      }
+  const renderRecommendationPayload = (payload: any) => {
+    if (payload.type === 'recommendations' && payload.data?.products) {
+      return (
+        <div className="inline-payload-wrapper">
+          <ProductCards products={payload.data.products} />
+          
+          <div className="payload-actions-row mt-4">
+            <button className="btn btn-sm btn-outline" onClick={() => setShowCompareModal(true)}>
+              <LayoutGrid size={13} /> {t('compareProducts')}
+            </button>
+            <button className="btn btn-sm btn-outline" onClick={() => setShowReviewModal(true)}>
+              <Star size={13} /> {t('reviewProduct')}
+            </button>
+          </div>
+        </div>
+      );
     }
-  }, [products.length]);
+    return null;
+  };
 
   return (
-    <div className="page-wrapper">
+    <div className="page-wrapper conversational-page">
       {/* Header */}
       <motion.div className="page-header-row" initial={{ opacity:0, y:-12 }} animate={{ opacity:1, y:0 }} transition={{ duration:.4 }}>
         <div>
@@ -129,128 +134,89 @@ export default function RecommendationPage() {
 
       {error && <motion.div className="alert-error" initial={{ opacity:0 }} animate={{ opacity:1 }}>{error}</motion.div>}
 
-      {/* Products */}
-      {products.length > 0 && (
-        <motion.div ref={resultsRef} initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:.15 }}>
-          <ProductCards products={products} title={t('recommendedProducts')} />
-        </motion.div>
-      )}
+      {/* Chat Flow */}
+      <div className="conversational-chat-container">
+        <ChatBox 
+          messages={state.recommendationMessages} 
+          onSend={handleChat}
+          placeholder={state.recommendationSessionId ? t('askRefinements') : t('whatLookingForPlaceholder')} 
+          loading={chatLoad}
+          renderPayload={renderRecommendationPayload}
+        />
+      </div>
 
-      {/* Actions */}
-      {products.length >= 2 && (
-        <>
-          <motion.div className="actions-two-col" initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }} transition={{ delay:.2 }}>
-            <div className="glass-card action-card" style={{ cursor: 'pointer' }} onClick={() => setShowCompareModal(true)}>
-              <div className="action-card-header">
-                <div className="action-icon-box"><LayoutGrid size={18} /></div>
+      {/* Modals for actions inside payload */}
+      <AnimatePresence>
+        {showCompareModal && (
+          <motion.div className="modal-backdrop" style={{ position:'fixed', inset:0, zIndex:250, background:'rgba(0,0,0,0.45)', display:'grid', placeItems:'center', padding:20 }}
+            initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }} onClick={closeModals}>
+            <motion.div className="glass-card" style={{ width:'min(760px,100%)', maxHeight:'calc(100vh - 80px)', overflowY:'auto', padding:24, position:'relative' }}
+              initial={{ scale:0.98, y:16, opacity:0 }} animate={{ scale:1, y:0, opacity:1 }} exit={{ scale:0.96, y:12, opacity:0 }} onClick={e => e.stopPropagation()}>
+              <div className="modal-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
                 <div>
                   <div className="action-card-title">{t('compareProducts')}</div>
-                  <div className="action-card-desc">{t('selectToCompare')}</div>
+                  <div className="action-card-desc" style={{ marginTop:6 }}>{t('selectToCompare')}</div>
                 </div>
+                <button className="btn-icon" onClick={closeModals}><X size={16} /></button>
               </div>
-              <div className="action-card-footer">
-                <button className="btn btn-secondary btn-full" type="button">
-                  {t('compareSelected')}
+              <div className="pick-list" style={{ maxHeight:320, overflowY:'auto', marginBottom:18 }}>
+                {titles.map(title => {
+                  const sel = selComp.includes(title);
+                  return (
+                    <div key={title} className={`pick-item ${sel ? 'sel' : ''}`}
+                      onClick={() => setSelComp(prev => sel ? prev.filter(t => t !== title) : prev.length < 2 ? [...prev, title] : prev)}>
+                      <span className="pick-box">{sel && <svg width="9" height="8" viewBox="0 0 9 8"><polyline points="1,4 3.5,6.5 8,1" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>}</span>
+                      <span className="pick-label">{title}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display:'flex', gap:12, flexWrap:'wrap', alignItems:'center' }}>
+                <button className="btn btn-primary btn-full" type="button" onClick={() => { handleCompare(); closeModals(); }} disabled={selComp.length !== 2}>
+                  <LayoutGrid size={14} /> {t('compareSelected')}
                 </button>
+                {selComp.length !== 2 && <div style={{ color:'var(--c-text-5)' }}>{t('selectExactly2')}</div>}
               </div>
-            </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-            <div className="glass-card action-card" style={{ cursor: 'pointer' }} onClick={() => setShowReviewModal(true)}>
-              <div className="action-card-header">
-                <div className="action-icon-box"><Star size={18} /></div>
+      <AnimatePresence>
+        {showReviewModal && (
+          <motion.div className="modal-backdrop" style={{ position:'fixed', inset:0, zIndex:250, background:'rgba(0,0,0,0.45)', display:'grid', placeItems:'center', padding:20 }}
+            initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }} onClick={closeModals}>
+            <motion.div className="glass-card" style={{ width:'min(760px,100%)', maxHeight:'calc(100vh - 80px)', overflowY:'auto', padding:24, position:'relative' }}
+              initial={{ scale:0.98, y:16, opacity:0 }} animate={{ scale:1, y:0, opacity:1 }} exit={{ scale:0.96, y:12, opacity:0 }} onClick={e => e.stopPropagation()}>
+              <div className="modal-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
                 <div>
                   <div className="action-card-title">{t('reviewProduct')}</div>
-                  <div className="action-card-desc">{t('pickToReview')}</div>
+                  <div className="action-card-desc" style={{ marginTop:6 }}>{t('pickToReview')}</div>
                 </div>
+                <button className="btn-icon" onClick={closeModals}><X size={16} /></button>
               </div>
-              <div className="action-card-footer">
-                <button className="btn btn-secondary btn-full" type="button">
-                  {t('startReview')}
+              <div className="pick-list" style={{ maxHeight:320, overflowY:'auto', marginBottom:18 }}>
+                {titles.map(title => {
+                  const sel = (selRev || titles[0]) === title;
+                  return (
+                    <div key={title} className={`pick-item ${sel ? 'sel' : ''}`} onClick={() => setSelRev(title)}>
+                      <span className="pick-radio-btn" />
+                      <span className="pick-label">{title}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display:'flex', gap:12, alignItems:'center' }}>
+                <button className="btn btn-primary btn-full" type="button" onClick={() => { handleReview(); closeModals(); }}>
+                  <Star size={14} /> {t('startReview')}
                 </button>
+                {!selRev && <div style={{ color:'var(--c-text-5)' }}>{t('pickToReview')}</div>}
               </div>
-            </div>
+            </motion.div>
           </motion.div>
-
-          <AnimatePresence>
-            {showCompareModal && (
-              <motion.div className="modal-backdrop" style={{ position:'fixed', inset:0, zIndex:50, background:'rgba(0,0,0,0.45)', display:'grid', placeItems:'center', padding:20 }}
-                initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }} onClick={closeModals}>
-                <motion.div className="glass-card" style={{ width:'min(760px,100%)', maxHeight:'calc(100vh - 80px)', overflowY:'auto', padding:24, position:'relative' }}
-                  initial={{ scale:0.98, y:16, opacity:0 }} animate={{ scale:1, y:0, opacity:1 }} exit={{ scale:0.96, y:12, opacity:0 }} onClick={e => e.stopPropagation()}>
-                  <div className="modal-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
-                    <div>
-                      <div className="action-card-title">{t('compareProducts')}</div>
-                      <div className="action-card-desc" style={{ marginTop:6 }}>{t('selectToCompare')}</div>
-                    </div>
-                    <button className="btn-icon" onClick={closeModals}><X size={16} /></button>
-                  </div>
-                  <div className="pick-list" style={{ maxHeight:320, overflowY:'auto', marginBottom:18 }}>
-                    {titles.map(title => {
-                      const sel = selComp.includes(title);
-                      return (
-                        <div key={title} className={`pick-item ${sel ? 'sel' : ''}`}
-                          onClick={() => setSelComp(prev => sel ? prev.filter(t => t !== title) : prev.length < 2 ? [...prev, title] : prev)}>
-                          <span className="pick-box">{sel && <svg width="9" height="8" viewBox="0 0 9 8"><polyline points="1,4 3.5,6.5 8,1" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>}</span>
-                          <span className="pick-label">{title}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div style={{ display:'flex', gap:12, flexWrap:'wrap', alignItems:'center' }}>
-                    <button className="btn btn-primary btn-full" type="button" onClick={() => { handleCompare(); closeModals(); }} disabled={selComp.length !== 2}>
-                      <LayoutGrid size={14} /> {t('compareSelected')}
-                    </button>
-                    {selComp.length !== 2 && <div style={{ color:'var(--c-text-5)' }}>{t('selectExactly2')}</div>}
-                  </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <AnimatePresence>
-            {showReviewModal && (
-              <motion.div className="modal-backdrop" style={{ position:'fixed', inset:0, zIndex:50, background:'rgba(0,0,0,0.45)', display:'grid', placeItems:'center', padding:20 }}
-                initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }} onClick={closeModals}>
-                <motion.div className="glass-card" style={{ width:'min(760px,100%)', maxHeight:'calc(100vh - 80px)', overflowY:'auto', padding:24, position:'relative' }}
-                  initial={{ scale:0.98, y:16, opacity:0 }} animate={{ scale:1, y:0, opacity:1 }} exit={{ scale:0.96, y:12, opacity:0 }} onClick={e => e.stopPropagation()}>
-                  <div className="modal-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
-                    <div>
-                      <div className="action-card-title">{t('reviewProduct')}</div>
-                      <div className="action-card-desc" style={{ marginTop:6 }}>{t('pickToReview')}</div>
-                    </div>
-                    <button className="btn-icon" onClick={closeModals}><X size={16} /></button>
-                  </div>
-                  <div className="pick-list" style={{ maxHeight:320, overflowY:'auto', marginBottom:18 }}>
-                    {titles.map(title => {
-                      const sel = (selRev || titles[0]) === title;
-                      return (
-                        <div key={title} className={`pick-item ${sel ? 'sel' : ''}`} onClick={() => setSelRev(title)}>
-                          <span className="pick-radio-btn" />
-                          <span className="pick-label">{title}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div style={{ display:'flex', gap:12, alignItems:'center' }}>
-                    <button className="btn btn-primary btn-full" type="button" onClick={() => { handleReview(); closeModals(); }}>
-                      <Star size={14} /> {t('startReview')}
-                    </button>
-                    {!selRev && <div style={{ color:'var(--c-text-5)' }}>{t('pickToReview')}</div>}
-                  </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </>
-      )}
-
-      {/* Chat */}
-      <motion.div className="glass-card chat-section" initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:.25 }}>
-        <div className="chat-section-title"><MessageSquare size={15} /> {t('chatHistory')}</div>
-        <ChatBox messages={state.recommendationMessages} onSend={handleChat}
-          placeholder={state.recommendationSessionId ? t('askRefinements') : t('whatLookingForPlaceholder')} loading={chatLoad}
-          emptyText={t('noConversation')} />
-      </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+
