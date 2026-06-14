@@ -5,6 +5,13 @@ import { useApp, useDispatch } from '../store/AppContext';
 import { useT } from '../i18n/translations';
 import { startReview, chatReview, ApiClientError } from '../services/api';
 import ChatBox from '../components/ChatBox';
+import * as HoverCard from '@radix-ui/react-hover-card';
+
+function getYoutubeId(url: string) {
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
+}
 
 function ReviewResult({ result }: { result: any }) {
   const { state } = useApp();
@@ -40,6 +47,12 @@ function ReviewResult({ result }: { result: any }) {
       {product_display_name && (
         <div className="review-product-header">
           <h2 className="review-product-name">{product_display_name}</h2>
+        </div>
+      )}
+
+      {summary && (
+        <div className="review-summary-container mb-8">
+          <p className="review-summary-text">{summary}</p>
         </div>
       )}
 
@@ -123,11 +136,42 @@ function ReviewResult({ result }: { result: any }) {
         <div className="review-sources-section">
           <div className="result-section-title opacity-60"><Link size={14} /> {t('videoSources')}</div>
           <div className="source-chips mt-4">
-            {sources.map((s:any, i:number) => (
-              <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="source-chip transition-all hover:scale-[1.02]">
-                <Link size={10} /> {(s.title || `Source ${i+1}`).slice(0, 45)}...
-              </a>
-            ))}
+            {sources.map((s:any, i:number) => {
+              const ytid = getYoutubeId(s.url);
+              const thumb = s.thumbnail || (ytid ? `https://img.youtube.com/vi/${ytid}/mqdefault.jpg` : null);
+              
+              return (
+                <HoverCard.Root key={i} openDelay={200} closeDelay={100}>
+                  <HoverCard.Trigger asChild>
+                    <a href={s.url} target="_blank" rel="noopener noreferrer" className="source-chip transition-all hover:scale-[1.02]">
+                      <Link size={10} /> {(s.title || `Source ${i+1}`).slice(0, 45)}...
+                    </a>
+                  </HoverCard.Trigger>
+                  <HoverCard.Portal>
+                    <HoverCard.Content 
+                      className="glass-card p-2 shadow-2xl z-[500] animate-in fade-in zoom-in duration-200" 
+                      sideOffset={8}
+                      style={{ width: 240 }}
+                    >
+                      {thumb ? (
+                        <div className="rounded-lg overflow-hidden aspect-video bg-black/10">
+                          <img src={thumb} alt={s.title} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="aspect-video bg-primary/5 rounded-lg flex items-center justify-center">
+                          <Link size={24} className="opacity-20" />
+                        </div>
+                      )}
+                      <div className="mt-2 px-1">
+                        <div className="text-[11px] font-bold line-clamp-2 leading-tight">{s.title || 'Video Source'}</div>
+                        <div className="text-[9px] text-gray-400 mt-1 truncate opacity-60">{s.url}</div>
+                      </div>
+                      <HoverCard.Arrow className="fill-white/10" />
+                    </HoverCard.Content>
+                  </HoverCard.Portal>
+                </HoverCard.Root>
+              );
+            })}
           </div>
         </div>
       )}

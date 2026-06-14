@@ -56,6 +56,15 @@ function CompResult({ result }: { result: Record<string, unknown> | null }) {
 
   return (
     <div className="comp-result-inline">
+      {/* Summary Section */}
+      {summary && (
+        <div className="result-section">
+          <div className="review-summary-container">
+            <p className="review-summary-text">{summary}</p>
+          </div>
+        </div>
+      )}
+
       {/* Feature Answer (Follow-ups) */}
       {comparison && feature && (
         <div className="result-section">
