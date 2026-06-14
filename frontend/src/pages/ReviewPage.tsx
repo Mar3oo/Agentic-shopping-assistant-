@@ -174,7 +174,7 @@ export default function ReviewPage() {
 
 
   const renderReviewPayload = (payload: any) => {
-    if (payload.type === 'review' || payload.type === 'answer') {
+    if (payload.type === 'review') {
       return (
         <div className="inline-payload-wrapper glass-card p-6 md:p-10 mt-4 overflow-hidden">
           <ReviewResult result={payload.data || payload} />

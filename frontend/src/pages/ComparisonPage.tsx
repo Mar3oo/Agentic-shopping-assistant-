@@ -190,7 +190,7 @@ export default function ComparisonPage() {
 
 
   const renderComparisonPayload = (payload: any) => {
-    if (payload.type === 'comparison' || payload.type === 'feature_answer') {
+    if (payload.type === 'comparison') {
       return (
         <div className="inline-payload-wrapper glass-card mt-4 overflow-hidden shadow-xl border-white/10">
           <CompResult result={payload.data || payload} />
