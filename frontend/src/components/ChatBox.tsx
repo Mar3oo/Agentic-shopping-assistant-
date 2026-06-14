@@ -131,7 +131,7 @@ export default function ChatBox({ messages, onSend, placeholder, loading = false
                 </div>
                 
                 <div className="msg-content">
-                  {msg.content && (
+                  {msg.content && !(msg.role === 'assistant' && i === 1 && msg.payload) && (
                     <div className="text-content prose prose-sm dark:prose-invert max-w-none">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {msg.content}

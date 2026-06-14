@@ -67,16 +67,6 @@ function ReviewResult({ result }: { result: any }) {
       )}
 
 
-      {summary && (
-        <div className="review-summary-container">
-          <h3 className="review-summary-heading">
-            <Lightbulb size={18} className="text-[var(--c-accent-1)]" />
-            {t('Review Summary of Real Experience') || 'Review Summary of Real Experience'}
-          </h3>
-          <p className="review-summary-text">{summary}</p>
-        </div>
-      )}
-
       {(Array.isArray(pros) && pros.length > 0 || Array.isArray(cons) && cons.length > 0) && (
         <div className="pros-cons-grid">
           {Array.isArray(pros) && pros.length > 0 && (

@@ -56,12 +56,6 @@ function CompResult({ result }: { result: Record<string, unknown> | null }) {
 
   return (
     <div className="comp-result-inline">
-      {summary && (
-        <div className="result-summary prose prose-sm dark:prose-invert max-w-none" style={{ marginBottom: 20 }}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary}</ReactMarkdown>
-        </div>
-      )}
-
       {/* Feature Answer (Follow-ups) */}
       {comparison && feature && (
         <div className="result-section">
