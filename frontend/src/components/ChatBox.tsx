@@ -1,10 +1,11 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, ReactNode } from 'react';
 import { useApp } from '../store/AppContext';
 import { useT } from '../i18n/translations';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Paperclip, User, ArrowDownCircle } from 'lucide-react';
+import { Send, User, ArrowDownCircle, Sparkles } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { ChatMessage } from '../store/AppContext';
-import RECOAvatar, { type AvatarState } from './RECOAvatar';
 
 interface Props {
   messages: ChatMessage[];
@@ -13,44 +14,77 @@ interface Props {
   loading?: boolean;
   emptyText?: string;
   disabled?: boolean;
+  renderPayload?: (payload: any) => ReactNode;
 }
 
 const msgAnim = {
-  initial: { opacity: 0, y: 8, scale: 0.97 },
+  initial: { opacity: 0, y: 12, scale: 0.98 },
   animate: { opacity: 1, y: 0, scale: 1 },
-  exit:    { opacity: 0, scale: 0.95 },
+  exit:    { opacity: 0, scale: 0.98 },
 };
 
-export default function ChatBox({ messages, onSend, placeholder, loading = false, emptyText, disabled = false }: Props) {
+const LOADING_MESSAGES_EN = [
+  "Comparing specs like a shopping nerd...",
+  "Reading suspiciously long reviews...",
+  "Trying not to recommend bad products...",
+  "Arguing with the internet about the best option...",
+  "Summoning tech wisdom...",
+  "Checking for hidden deals...",
+  "Analyzing user sentiment (the drama)..."
+];
+
+const LOADING_MESSAGES_AR = [
+  "بنشوف المواصفات واحدة واحدة...",
+  "بنقرأ المراجعات الطويلة عشان نوفر عليك...",
+  "بنحاول ما نرشحلكش حاجة وحشة 😅",
+  "بنتخانق مع الإنترنت على أفضل اختيار...",
+  "بنجيب الحكمة التقنية حالًا...",
+  "بندور على عروض مستخبية...",
+  "بنحلل آراء الناس (كلام كتير)..."
+];
+
+function PlayfulLoading({ lang }: { lang: string }) {
+  const [index, setIndex] = useState(0);
+  const messages = lang === 'ar' ? LOADING_MESSAGES_AR : LOADING_MESSAGES_EN;
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setIndex(prev => (prev + 1) % messages.length);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [messages.length]);
+
+  return (
+    <motion.div 
+      key={index}
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -5 }}
+      className="loading-message-text"
+    >
+      {messages[index]}
+    </motion.div>
+  );
+}
+
+export default function ChatBox({ messages, onSend, placeholder, loading = false, emptyText, disabled = false, renderPayload }: Props) {
   const { state } = useApp();
   const t = useT(state.lang);
   const [input, setInput] = useState('');
   const [showScrollDown, setShowScrollDown] = useState(false);
-  const [showScrollToChat, setShowScrollToChat] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
-  const chatRootRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const hasMounted = useRef(false);
   const isRTL = state.lang === 'ar';
 
-  const defaultEmpty = emptyText ?? t('noConversation');
-  const defaultHint = t('askRefinements');
-
   const isAtBottom = (el: HTMLDivElement) => {
-    return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 100;
   };
 
   const handleMessagesScroll = () => {
     const el = messagesRef.current;
     if (!el) return;
     setShowScrollDown(!isAtBottom(el));
-  };
-
-  const handleWindowScroll = () => {
-    const el = chatRootRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    setShowScrollToChat(rect.top > window.innerHeight - 120 || rect.bottom < 140);
   };
 
   useEffect(() => {
@@ -69,12 +103,6 @@ export default function ChatBox({ messages, onSend, placeholder, loading = false
     }
   }, [messages.length, loading]);
 
-  useEffect(() => {
-    handleWindowScroll();
-    window.addEventListener('scroll', handleWindowScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleWindowScroll);
-  }, []);
-
   const send = () => {
     const t = input.trim();
     if (!t || disabled || loading) return;
@@ -82,124 +110,121 @@ export default function ChatBox({ messages, onSend, placeholder, loading = false
     setInput('');
   };
 
-  // Derive avatar state from context
-  const avatarState: AvatarState = loading ? 'thinking' : input.length > 0 ? 'listening' : 'idle';
-
   return (
-    <div className="chat-box-layout">
-      {/* Avatar column — always visible beside chat */}
-      <div className="chat-avatar-col">
-        <RECOAvatar
-          size={96}
-          avatarState={avatarState}
-          interactive
-          showThoughts={loading}
-        />
-      </div>
-
-      {/* Messages + input */}
-      <div className="chat-box" ref={chatRootRef}>
-        <div className="chat-messages" ref={messagesRef} onScroll={handleMessagesScroll}>
-
-          {/* Empty state */}
-          {messages.length === 0 && !loading && (
-            <motion.div
-              className="chat-empty-avatar-state"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <RECOAvatar size={110} avatarState="idle" interactive showThoughts={false} />
-                <div className="chat-empty-avatar-label">{emptyText || defaultEmpty}</div>
-                <div className="chat-empty-avatar-hint">{defaultHint}</div>
-            </motion.div>
-          )}
-
-          <AnimatePresence initial={false}>
-            {messages.map((msg, i) => (
+    <div className="chat-box-conversational">
+      <div className="chat-messages-flow" ref={messagesRef} onScroll={handleMessagesScroll}>
+        <AnimatePresence initial={false}>
+          {messages.map((msg, i) => (
+            <div key={i} className={`chat-row ${msg.role === 'user' ? 'user-row' : 'bot-row'}`}>
               <motion.div
-                key={i}
-                className={`chat-msg ${msg.role === 'user' ? 'user-msg' : ''}`}
+                className={`chat-msg-v2 ${msg.role === 'user' ? 'user-msg' : 'bot-msg'}`}
                 {...msgAnim}
-                transition={{ duration: 0.22 }}
+                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
               >
-                <div
-                  className={`chat-av ${msg.role === 'assistant' ? 'bot' : 'usr'}`}
-                  style={msg.role === 'assistant' ? { background: 'transparent', border: 'none', padding: 0, overflow: 'visible', width: 32, height: 32 } : {}}
-                >
-                  {msg.role === 'assistant'
-                    ? <RECOAvatar size={32} avatarState="idle" interactive={false} />
-                    : <User size={13} />}
+                <div className="msg-header">
+                  <div className={`msg-icon ${msg.role === 'assistant' ? 'bot' : 'usr'}`}>
+                    {msg.role === 'assistant' ? <Sparkles size={12} /> : <User size={12} />}
+                  </div>
+                  <span className="msg-role-name">
+                    {msg.role === 'assistant' ? 'RECO' : t('yourName')}
+                  </span>
                 </div>
-                <div className={`chat-bubble ${msg.role === 'assistant' ? 'bot-msg' : 'usr-msg'}`}>
-                  <p>{msg.content}</p>
+                
+                <div className="msg-content">
+                  {msg.content && !(msg.role === 'assistant' && i === 1 && msg.payload) && (
+                    <div className="text-content prose prose-sm dark:prose-invert max-w-none">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+                  
+                  {msg.role === 'assistant' && i === 1 && msg.payload && renderPayload && (
+                    (() => {
+                      const payloadView = renderPayload(msg.payload);
+                      return payloadView ? (
+                        <div className="payload-content">
+                          {payloadView}
+                        </div>
+                      ) : null;
+                    })()
+                  )}
                 </div>
               </motion.div>
-            ))}
-          </AnimatePresence>
+            </div>
+          ))}
+        </AnimatePresence>
 
-          {showScrollDown && (
-            <button
-              type="button"
-              className="chat-scroll-down"
-              onClick={() => {
-                bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-                setShowScrollDown(false);
-              }}
-              title={isRTL ? 'انتقل إلى آخر المحادثة' : 'Jump to latest chat'}
-            >
-              <ArrowDownCircle size={20} />
-            </button>
-          )}
-
-          {loading && (
-            <motion.div className="chat-msg" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-              <div className="chat-av bot" style={{ background: 'transparent', border: 'none', padding: 0, overflow: 'visible', width: 32, height: 32 }}>
-                <RECOAvatar size={32} avatarState="thinking" interactive={false} showThoughts={false} />
+        {loading && (
+          <div className={`chat-row bot-row ${isRTL ? 'loading-centered-rtl' : ''}`}>
+            <motion.div className="chat-msg-v2 bot-msg typing" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <div className="msg-header">
+                <div className="msg-icon bot"><Sparkles size={12} /></div>
+                <span className="msg-role-name">RECO</span>
               </div>
-              <div className="chat-bubble bot-msg typing">
-                <span className="dot" /><span className="dot" /><span className="dot" />
+              <div className="typing-container">
+                <div className="typing-dots">
+                  <span className="dot" /><span className="dot" /><span className="dot" />
+                </div>
+                <div className="loading-message-wrapper">
+                  <AnimatePresence mode="wait">
+                    <PlayfulLoading lang={state.lang} />
+                  </AnimatePresence>
+                </div>
               </div>
             </motion.div>
-          )}
-          <div ref={bottomRef} />
-        </div>
-
-        {showScrollToChat && (
-          <button
-            type="button"
-            className="scroll-to-chat-button"
-            onClick={() => chatRootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-            title={isRTL ? 'العودة إلى المحادثة' : 'Back to chat'}
-          >
-            <ArrowDownCircle size={20} />
-          </button>
+          </div>
         )}
 
-        {/* Input bar */}
-          <div className="chat-input-bar">
-          <button className="chat-attach-btn" title={isRTL ? 'إرفاق ملف' : 'Attach file'}>
-            <Paperclip size={15} />
-          </button>
-          <input
-            className="chat-input"
+        
+        <div ref={bottomRef} className="chat-bottom-anchor" />
+      </div>
+
+      {showScrollDown && (
+        <button
+          type="button"
+          className="chat-scroll-btn"
+          onClick={() => {
+            bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+            setShowScrollDown(false);
+          }}
+        >
+          <ArrowDownCircle size={18} />
+        </button>
+      )}
+
+      <div className="chat-input-container">
+        <div className="chat-input-wrapper">
+          <textarea
+            className="chat-textarea"
+            rows={1}
             value={input}
-            onChange={e => setInput(e.target.value)}
-            placeholder={disabled ? t('startSession') : (placeholder || t('askRefinements'))}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+            onChange={e => {
+              setInput(e.target.value);
+              e.target.style.height = 'auto';
+              e.target.style.height = `${e.target.scrollHeight}px`;
+            }}
+            placeholder={placeholder || t('askRefinements')}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                send();
+                (e.target as HTMLTextAreaElement).style.height = 'auto';
+              }
+            }}
             disabled={disabled || loading}
           />
-          <motion.button
-            className="chat-send"
+          <button
+            className="chat-send-v2"
             onClick={send}
             disabled={!input.trim() || disabled || loading}
-            whileHover={{ scale: 1.08 }}
-            whileTap={{ scale: 0.92 }}
           >
-            {loading ? <span className="spinner" /> : <Send size={14} />}
-          </motion.button>
+            {loading ? <div className="loading-spinner-sm" /> : <Send size={16} />}
+          </button>
         </div>
       </div>
     </div>
   );
 }
+
+

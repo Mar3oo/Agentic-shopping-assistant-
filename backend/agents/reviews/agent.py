@@ -44,8 +44,9 @@ class ReviewAgent:
         if self.language == "ar":
             return (
                 "Respond entirely in Arabic. "
-                "Keep product names, technical specifications, "
-                "and brand names in English when appropriate."
+                "Keep product names, technical specifications, and brand names in English when appropriate. "
+                "When returning JSON, write every user-facing value in Arabic and keep only the JSON keys in English. "
+                "Use Arabic sentiment labels only: إيجابي / محايد / سلبي."
             )
 
         return "Respond entirely in English."
@@ -58,13 +59,21 @@ class ReviewAgent:
             self.query = None
             self.sources = []
             self.reviews_data = None
-            return "Ready for a new review search. Please enter a product."
+            return (
+                "جاهز للبحث عن مراجعة جديدة. من فضلك أدخل اسم المنتج."
+                if self.language == "ar"
+                else "Ready for a new review search. Please enter a product."
+            )
 
         if self._is_new_review(user_input):
-            return self.start_review(user_input)
+            return self.start_review(user_input, language=self.language)
 
         if not self.product:
-            return "Please specify a product to review."
+            return (
+                "من فضلك حدد المنتج الذي تريد مراجعته."
+                if self.language == "ar"
+                else "Please specify a product to review."
+            )
 
         return self.answer_followup(user_input)
 
@@ -84,16 +93,22 @@ class ReviewAgent:
     def start_review(
         self,
         user_input: str,
-        language: str = "en",
+        language: str | None = None,
     ):
 
         product = self._parse_product(user_input)
 
         if not product:
-            return "Please specify a product."
+            requested_language = language or self.language
+            return (
+                "من فضلك حدد اسم المنتج."
+                if requested_language == "ar"
+                else "Please specify a product."
+            )
 
         self.product = extract_clean_product_name(product)
-        self.language = language
+        if language:
+            self.language = language
 
         return self.run_review_pipeline()
 
@@ -139,7 +154,7 @@ class ReviewAgent:
         if not transcripts:
             return self._generate_review_from_llm()
 
-        result = analyze_reviews(self.product, transcripts)
+        result = analyze_reviews(self.product, transcripts, language=self.language)
 
         # attach YouTube sources
         sources = [
@@ -154,6 +169,7 @@ class ReviewAgent:
         # merge into result
         if isinstance(result, dict):
             result["sources"] = sources
+            result["product_display_name"] = self.product
 
         # store
         self.query = query
@@ -161,6 +177,7 @@ class ReviewAgent:
         self.reviews_data = result
 
         return result
+
 
     def _generate_review_from_llm(self):
         prompt = f"""

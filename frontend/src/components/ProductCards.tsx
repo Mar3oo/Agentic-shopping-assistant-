@@ -85,10 +85,9 @@ export default function ProductCards({ products, title, onSelect, selectedTitles
               </div>
               <div className="product-card-body">
                 {p.source && <div className="product-source">{p.source}</div>}
-                <div className="product-name">{p.title || 'Unnamed Product'}</div>
-                {p.details_text && (
-                  <div className="product-desc">{String(p.details_text).replace(/<[^>]+>/g, '')}</div>
-                )}
+                <div className="product-name" title={p.title}>{p.display_name || p.title || 'Unnamed Product'}</div>
+                <div className="product-desc">{p.title}</div>
+
                 <div className="product-footer-row">
                   {price ? (
                     <span className="product-price">{price}</span>

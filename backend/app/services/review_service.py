@@ -1,5 +1,3 @@
-from email.mime import message
-
 from backend.agents.reviews.agent import ReviewAgent
 
 from backend.app.services.cache_service import (
@@ -21,12 +19,12 @@ def _t(language: str, en: str, ar: str) -> str:
     return ar if language == "ar" else en
 
 
-def _assistant_summary(result) -> str:
+def _assistant_summary(result, language: str = "en") -> str:
     if isinstance(result, str):
         return result
     if isinstance(result, dict):
-        return result.get("summary", "Here are the reviews")
-    return "Here are the reviews"
+        return result.get("summary") or _t(language, "Here are the reviews", "هذه مراجعات المنتج")
+    return _t(language, "Here are the reviews", "هذه مراجعات المنتج")
 
 
 def _is_new_review_task(agent_state: dict, message: str) -> bool:
@@ -98,7 +96,7 @@ def _start_review_session(
     append_user_message(user_id, session_id, "review", message)
 
     try:
-        fingerprint = {"message": message}
+        fingerprint = {"message": message, "language": language}
         cached = load_cached_response("review", fingerprint)
 
         if cached:
@@ -130,7 +128,7 @@ def _start_review_session(
             user_id,
             session_id,
             "review",
-            _assistant_summary(result),
+            _assistant_summary(result, language),
             payload=result,
             metadata={"cached": bool(cached)},
         )
@@ -158,7 +156,7 @@ def _start_review_session(
             user_id,
             session_id,
             "review",
-            "Review request failed",
+            _t(language, "Review request failed", "فشل طلب المراجعة"),
             payload={"error": str(exc)},
         )
         return {
@@ -244,7 +242,7 @@ def chat_review(
             user_id,
             session_id,
             "review",
-            "Review chat failed",
+            _t(language, "Review chat failed", "فشلت محادثة المراجعة"),
             payload={"error": str(exc)},
         )
         return {
@@ -267,22 +265,19 @@ def chat_review(
         status="active",
         last_error=None,
     )
+    summary = _assistant_summary(result, language)
     append_assistant_message(
         user_id,
         session_id,
         "review",
-        _assistant_summary(result),
+        summary,
         payload=result,
     )
 
     return {
         "status": "success",
         "type": "review",
-        "message": _t(
-            language,
-            "Updated review",
-            "تم تحديث المراجعات",
-        ),
+        "message": summary,
         "session_id": session_id,
         "data": result,
     }

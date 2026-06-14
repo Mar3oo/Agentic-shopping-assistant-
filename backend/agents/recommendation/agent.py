@@ -283,4 +283,22 @@ class RecommendationAgent:
         # 10) Final Top-K and apply diversity
         # -----------------------------
         final = self._apply_diversity(final, top_k)
+
+        # -----------------------------
+        # 11) Add Clean Display Names
+        # -----------------------------
+        from backend.agents.shared.product_name_extractor import (
+            extract_clean_product_mappings,
+        )
+
+        titles = [p.get("title") or "" for p in final]
+        mappings = extract_clean_product_mappings(titles)
+
+        for i, p in enumerate(final):
+            if i < len(mappings):
+                p["display_name"] = mappings[i]["product_clean"]
+            else:
+                p["display_name"] = p.get("title")
+
         return final
+

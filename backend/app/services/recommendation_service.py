@@ -364,11 +364,7 @@ def chat_recommendation(
         return {
             "status": "success",
             "type": "recommendations",
-            "message": _t(
-                session_language,
-                "Updated recommendations",
-                "تم تحديث التوصيات",
-            ),
+            "message": assistant_text,
             "session_id": session_id,
             "data": {
                 "products": response["data"],
