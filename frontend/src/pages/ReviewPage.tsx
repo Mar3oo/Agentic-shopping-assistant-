@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Star, ThumbsUp, ThumbsDown, Lightbulb, Target, Link, TrendingUp } from 'lucide-react';
+import { Star, ThumbsUp, ThumbsDown, Lightbulb, Target, Link, TrendingUp, Smile, Coins } from 'lucide-react';
 import { useApp, useDispatch } from '../store/AppContext';
 import { useT } from '../i18n/translations';
 import { startReview, chatReview, ApiClientError } from '../services/api';
@@ -48,6 +48,7 @@ function ReviewResult({ result }: { result: any }) {
           {sentiment_score && (
             <div className={`review-metric-card sentiment-card ${sentimentClass(sentiment_score)}`}>
               <div className="metric-label-row">
+                <Smile size={14} className="metric-icon" />
                 <span className="metric-label">{t('sentiment')}</span>
               </div>
               <span className="metric-value">{sentiment_score}</span>
@@ -56,6 +57,7 @@ function ReviewResult({ result }: { result: any }) {
           {value_for_money && (
             <div className="review-metric-card value-card">
               <div className="metric-label-row">
+                <Coins size={14} className="metric-icon" />
                 <span className="metric-label">{t('valueForMoney')}</span>
               </div>
               <span className="metric-value">{value_for_money}</span>
@@ -67,6 +69,10 @@ function ReviewResult({ result }: { result: any }) {
 
       {summary && (
         <div className="review-summary-container">
+          <h3 className="review-summary-heading">
+            <Lightbulb size={18} className="text-[var(--c-accent-1)]" />
+            {t('Review Summary of Real Experience') || 'Review Summary of Real Experience'}
+          </h3>
           <p className="review-summary-text">{summary}</p>
         </div>
       )}

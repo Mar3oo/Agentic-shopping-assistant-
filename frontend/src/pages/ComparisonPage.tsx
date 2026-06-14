@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { LayoutGrid, MessageSquare, Link } from 'lucide-react';
 import { useApp, useDispatch } from '../store/AppContext';
+import type { ChatMessage } from '../store/AppContext';
 import { useT } from '../i18n/translations';
 import { startComparison, chatComparison, ApiClientError } from '../services/api';
 import ChatBox from '../components/ChatBox';
@@ -79,7 +80,7 @@ function CompResult({ result }: { result: Record<string, unknown> | null }) {
       {/* Comparison Table */}
       {Array.isArray(comparison_table) && comparison_table.length > 0 && (
         <div className="result-section">
-          <div className="result-section-title">📊 {t('comparisonTable') || 'Specifications'}</div>
+          <div className="result-section-title">📊 Specifications </div>
           <div className="comp-table-wrap mt-3">
             <table className={`comp-table ${state.lang === 'ar' ? 'rtl' : ''}`} dir={state.lang === 'ar' ? 'rtl' : 'ltr'}>
               <thead><tr>{Object.keys(comparison_table[0]).map(k=><th key={k}>{headerText(k)}</th>)}</tr></thead>
@@ -111,8 +112,23 @@ function CompResult({ result }: { result: Record<string, unknown> | null }) {
           <div className="result-section-title">🏆 {t('recommendation')}</div>
           <div className="space-y-3 mt-2">
             {Object.entries(recommendation).map(([k,v])=>(
-              <div key={k} className="p-4 rounded-xl bg-primary/5 border border-primary/10">
-                <strong style={{ fontSize:'var(--text-xs)', color:'var(--c-primary-500)', display:'block', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.05em' }}>{recommendationLabel(k)}</strong>
+              <div
+                key={k}
+                className="recommendation-product-card p-4 rounded-xl bg-primary/5 border border-primary/10"
+              >
+                <strong
+                  style={{
+                    fontSize:'var(--text-xs)',
+                    color:'var(--c-primary-500)',
+                    display:'block',
+                    marginBottom:4,
+                    textTransform:'uppercase',
+                    letterSpacing:'0.05em'
+                  }}
+                >
+                  {recommendationLabel(k)}
+                </strong>
+
                 <div className="result-list">
                   {Array.isArray(v) ? (
                     cleanList(v).map((x,i)=>(
@@ -121,7 +137,7 @@ function CompResult({ result }: { result: Record<string, unknown> | null }) {
                       </div>
                     ))
                   ) : (
-                    <div className="text-sm" style={{ color:'var(--c-text-2)' }}>{String(v)}</div>
+                    <div className="text-sm">{String(v)}</div>
                   )}
                 </div>
               </div>
