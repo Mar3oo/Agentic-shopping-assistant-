@@ -265,22 +265,19 @@ def chat_review(
         status="active",
         last_error=None,
     )
+    summary = _assistant_summary(result, language)
     append_assistant_message(
         user_id,
         session_id,
         "review",
-        _assistant_summary(result, language),
+        summary,
         payload=result,
     )
 
     return {
         "status": "success",
         "type": "review",
-        "message": _t(
-            language,
-            "Updated review",
-            "تم تحديث المراجعات",
-        ),
+        "message": summary,
         "session_id": session_id,
         "data": result,
     }

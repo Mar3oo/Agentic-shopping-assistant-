@@ -139,10 +139,15 @@ export default function ChatBox({ messages, onSend, placeholder, loading = false
                     </div>
                   )}
                   
-                  {msg.payload && renderPayload && (
-                    <div className="payload-content">
-                      {renderPayload(msg.payload)}
-                    </div>
+                  {msg.role === 'assistant' && i === 1 && msg.payload && renderPayload && (
+                    (() => {
+                      const payloadView = renderPayload(msg.payload);
+                      return payloadView ? (
+                        <div className="payload-content">
+                          {payloadView}
+                        </div>
+                      ) : null;
+                    })()
                   )}
                 </div>
               </motion.div>
@@ -167,7 +172,6 @@ export default function ChatBox({ messages, onSend, placeholder, loading = false
                   </AnimatePresence>
                 </div>
               </div>
-              <div className="skeleton-placeholder-block mt-4" />
             </motion.div>
           </div>
         )}

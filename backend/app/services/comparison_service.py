@@ -265,22 +265,19 @@ def chat_comparison(
         status="active",
         last_error=None,
     )
+    summary = _assistant_summary(response)
     append_assistant_message(
         user_id,
         session_id,
         "comparison",
-        _assistant_summary(response),
+        summary,
         payload=response,
     )
 
     return {
         "status": "success",
         "type": "comparison",
-        "message": _t(
-            language,
-            "Updated comparison",
-            "تم تحديث المقارنة",
-        ),
+        "message": summary,
         "session_id": session_id,
         "data": response,
     }
