@@ -2730,8 +2730,23 @@ h3, h4, .section-title { letter-spacing: var(--ls-tight); }
 }
 
 /* Page eyebrow RTL */
-.rtl .page-eyebrow { flex-direction: row-reverse; }
-.rtl .page-header-row { flex-direction: row-reverse; }
+.rtl .page-eyebrow { flex-direction: row; }
+.rtl .page-header-row { flex-direction: row; }
+
+/* Arabic Loading Centering */
+.rtl .chat-row.loading-centered-rtl {
+  justify-content: center;
+}
+.rtl .chat-row.loading-centered-rtl .chat-msg-v2 {
+  align-items: center;
+}
+.rtl .chat-row.loading-centered-rtl .msg-header {
+  flex-direction: row;
+}
+.rtl .chat-row.loading-centered-rtl .bot-msg .text-content,
+.rtl .chat-row.loading-centered-rtl .bot-msg .typing-dots {
+  border-radius: 18px;
+}
 
 /* Nav active pip RTL */
 .rtl .nav-active-pip { margin-left: 0; margin-right: auto; }

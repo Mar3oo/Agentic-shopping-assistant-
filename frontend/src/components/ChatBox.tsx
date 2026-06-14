@@ -156,7 +156,7 @@ export default function ChatBox({ messages, onSend, placeholder, loading = false
         </AnimatePresence>
 
         {loading && (
-          <div className="chat-row bot-row">
+          <div className={`chat-row bot-row ${isRTL ? 'loading-centered-rtl' : ''}`}>
             <motion.div className="chat-msg-v2 bot-msg typing" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <div className="msg-header">
                 <div className="msg-icon bot"><Sparkles size={12} /></div>
